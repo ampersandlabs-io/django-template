@@ -1,4 +1,8 @@
-upstream houdini_app_server {
+#nginx config file
+# this file must be placed in /etc/nginx/sites-available/ (generally) and named properly.
+# and a link to /etc/nginx/sites-enabled/
+
+upstream {{ project_name }}.com {
   # fail_timeout=0 means we always retry an upstream even if it failed
   # to return a good HTTP response (in case the Unicorn master nukes a
   # single worker for timing out).
@@ -9,7 +13,7 @@ upstream houdini_app_server {
 server {
 
     listen   80;
-    server_name 54.148.18.34;   #replace with real IP address
+    server_name {{ project_name }}.com;   #replace with real IP address
 
     client_max_body_size 4G;
 
@@ -51,7 +55,7 @@ server {
         # Try to serve static files from nginx, no point in making an
         # *application* server like Unicorn/Rainbows! serve static files.
         if (!-f $request_filename) {
-            proxy_pass http://houdini_app_server;
+            proxy_pass http:/{{ project_name }}.com; #replace with real IP address
             break;
         }
     }

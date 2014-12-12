@@ -94,7 +94,7 @@ MIDDLEWARE_CLASSES = (
 
 ########## END MIDDLEWARE CONFIGURATION
 
-ROOT_URLCONF = '%s.urls' % r'{{ project_name }}'
+ROOT_URLCONF = '%s.urls' % r'{{ nginx }}'
 # ROOT_URLCONF = '%s.urls' % SITE_NAME
 
 ########## WSGI CONFIGURATION
@@ -154,7 +154,7 @@ STATIC_URL = S3_URL
 STATIC_ROOT = ''
 
 STATICFILES_DIRS = (
-    BASE_DIR('{{ project_name }}', 'static'),
+    BASE_DIR('{{ nginx }}', 'static'),
 )
 
 STATICFILES_FINDERS = (
@@ -169,7 +169,7 @@ TEMPLATE_LOADERS = (
     'django.template.loaders.app_directories.Loader',
 )
 
-TEMPLATE_DIRS = [BASE_DIR('{{ project_name }}', 'templates')]
+TEMPLATE_DIRS = [BASE_DIR('{{ nginx }}', 'templates')]
 
 ########## END AWS, STATIC, TEMPLATE CONFIGURATION
 
@@ -191,7 +191,7 @@ LOGGING = {
         'file': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            'filename': '{{project_name}}.log',
+            'filename': '{{nginx}}.log',
             'formatter': 'verbose'
         },
     },
@@ -201,7 +201,7 @@ LOGGING = {
             'propagate': True,
             'level': 'DEBUG',
         },
-        '{{project_name}}': {
+        '{{nginx}}': {
             'handlers': ['file'],
             'level': 'DEBUG',
         },
@@ -301,7 +301,7 @@ if not DEBUG:
 ########## DJANGO SUIT CONFIGURATION
 SUIT_CONFIG = {
     # header
-    'ADMIN_NAME': '{{ project_name }}',
+    'ADMIN_NAME': '{{ nginx }}',
     # 'MENU_EXCLUDE': ('auth.group',),
 }
 ########## END DJANGO SUIT CONFIGURATION
@@ -346,7 +346,7 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'djblin@gmail.com')
 EMAIL_PORT = os.environ.get('EMAIL_PORT', 587)
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#email-subject-prefix
-EMAIL_SUBJECT_PREFIX = '[%s] ' % '{{ project_name }}'
+EMAIL_SUBJECT_PREFIX = '[%s] ' % '{{ nginx }}'
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#email-use-tls
 EMAIL_USE_TLS = True

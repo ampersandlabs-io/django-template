@@ -15,7 +15,7 @@ BASE_DIR = lambda *x: os.path.join(
 env.run = 'python manage.py'
 
 AWS_EC2_CONFIGS = (
-    'DJANGO_SETTINGS_MODULE={{ project_name }}.settings.prod',
+    'DJANGO_SETTINGS_MODULE={{ nginx }}.settings.prod',
     'SECRET_KEY={0}'.format(os.environ.get('SECRET_KEY', '')),
     'AWS_ACCESS_KEY_ID={0}'.format(os.environ.get('AWS_S3_ACCESS_KEY_ID', '')),
     'AWS_SECRET_ACCESS_KEY={0}'.format(os.environ.get('AWS_S3_SECRET_ACCESS_KEY', '')),
@@ -94,17 +94,24 @@ def bootstrap():
     """
     cont('sudo apt-get update',
          "Couldn't update EC2 Instance, continue anyway?")
+
     cont('sudo apt-get upgrade',
          "Couldn't upgrade EC2 Instance, continue anyway?")
+
     cont('sudo apt-get install postgresql postgresql-contrib',
          "Couldn't install PostgresSQL, continue anyway?")
+
     cont('sudo su - postgres', "Couldn't login as postgres")
+
     cont('sudo apt-get install python-virtualenv',
          "Couldn't install python-virtualenv, continue anyway?")
+
     cd(BASE_DIR)
     cont('virtualenv env',
          "Couldn't create a virtual environment, continue anyway?")
+
     run('pip install -r requirements.txt')
+
     cont('sudo apt-get install libpq-dev python-dev',
          "Couldn't configure postgres to work with django, continue anyway?")
 
@@ -112,7 +119,7 @@ def bootstrap():
         cont('export {0}={1}'.format(config, config),
              "Couldn't add {} to your bash_rc, continue anyway?".format(config))
 
-    cont('sudo chmod u+x {}'.format(BASE_DIR('bin/start_gunicorn.bash')),
+    cont('sudo chmod u+x {}'.format(BASE_DIR('bin/gunicorn_start')),
          "Couldn't make script executable, continue anyway?")
 
 
@@ -141,15 +148,15 @@ def bootstrap():
     cont('sudo supervisorctl status',
          "Couldn't get supervisorctl status, continue anyway?")
 
-    cont('sudo supervisorctl restart {{project_name}}',
+    cont('sudo supervisorctl restart {{nginx}}',
          "Couldn't restart supervisorctl, continue anyway?")
 
-    cont('sudo cp {} /etc/nginx/sites-available/{{project_name}}'.format(BASE_DIR('{{project_name}}',
+    cont('sudo cp {} /etc/nginx/sites-available/{{nginx}}'.format(BASE_DIR('{{nginx}}',
                                                                                   'conf',
-                                                                                  '{{project_name}}')),
+                                                                                  '{{nginx}}')),
          "Coundn't copy nginx config file into sites-available directory")
 
-    cont('sudo ln -s /etc/nginx/sites-available/{{project_name}} /etc/nginx/sites-enabled/{{project_name}}',
+    cont('sudo ln -s /etc/nginx/sites-available/{{nginx}} /etc/nginx/sites-enabled/{{nginx}}',
          "Couldn't symlink nginx config, continue anyway?")
 
     cont('sudo service nginx start',
@@ -198,3 +205,7 @@ def ss(port=8001):
 
 
 
+def pip_install(packages):
+    if not exists('/usr/local/bin/pip'):
+        sudo('/usr/bin/easy_install pip')
+    sudo('pip install %s' % ' '.join(packages))
