@@ -3,7 +3,7 @@ upstream houdini_app_server {
   # to return a good HTTP response (in case the Unicorn master nukes a
   # single worker for timing out).
 
-  server unix:/home/ubuntu/Houdini/run/gunicorn.sock fail_timeout=0;
+  server unix:/home/ubuntu/{{project_name}}/run/gunicorn.sock fail_timeout=0;
 }
 
 server {
@@ -13,15 +13,15 @@ server {
 
     client_max_body_size 4G;
 
-    access_log /home/ubuntu/Houdini/logs/nginx-access.log;
-    error_log /home/ubuntu/Houdini/logs/nginx-error.log;
+    access_log /home/ubuntu/{{project_name}}/logs/nginx-access.log;
+    error_log /home/ubuntu/{{project_name}}/logs/nginx-error.log;
 
     location /static/ {
-        alias   /home/ubuntu/Houdini/static/;
+        alias   /home/ubuntu/{{project_name}}/static/;
     }
 
     location /media/ {
-        alias   /home/ubuntu/Houdini/media/;
+        alias   /home/ubuntu/{{project_name}}/media/;
     }
 
     location / {
@@ -59,6 +59,6 @@ server {
     # Error pages
     error_page 500 502 503 504 /500.html;
     location = /500.html {
-        root /home/ubuntu/Houdini/static/;
+        root /home/ubuntu/{{project_name}}/static/;
     }
 }

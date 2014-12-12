@@ -155,8 +155,6 @@ def bootstrap():
     cont('sudo service nginx start',
          "Couldn't start nginx, continue anyway?")
 
-
-
     makemigrations()
     migrate()
 
