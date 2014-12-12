@@ -7,6 +7,7 @@ from fabric.api import abort, env, local, settings, task
 
 ########## GLOBALS
 env.run = 'heroku run python manage.py'
+
 HEROKU_ADDONS = (
     'cloudamqp:lemur',
     'heroku-postgresql:dev',
