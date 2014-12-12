@@ -1,28 +1,28 @@
 """Management utilities."""
 
-
+import os
 from fabric.contrib.console import confirm
-from fabric.api import abort, env, local, settings, task
+from fabric.api import abort, env, local, settings, task, cd, run
+from fabric.colors import green, red
 
+
+# env.hosts = [os.environ.get('ENV')]
 
 ########## GLOBALS
-env.run = 'heroku run python manage.py'
+BASE_DIR = lambda *x: os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), *x)
 
-HEROKU_ADDONS = (
-    'cloudamqp:lemur',
-    'heroku-postgresql:dev',
-    'scheduler:standard',
-    'memcachier:dev',
-    'newrelic:standard',
-    'pgbackups:auto-month',
-    'sentry:developer',
-)
-HEROKU_CONFIGS = (
+env.run = 'python manage.py'
+
+AWS_EC2_CONFIGS = (
     'DJANGO_SETTINGS_MODULE={{ project_name }}.settings.prod',
-    'SECRET_KEY={{ secret_key }}',
-    'AWS_ACCESS_KEY_ID=xxx',
-    'AWS_SECRET_ACCESS_KEY=xxx',
-    'AWS_STORAGE_BUCKET_NAME=xxx',
+    'SECRET_KEY={0}'.format(os.environ.get('SECRET_KEY', '')),
+    'AWS_ACCESS_KEY_ID={0}'.format(os.environ.get('AWS_S3_ACCESS_KEY_ID', '')),
+    'AWS_SECRET_ACCESS_KEY={0}'.format(os.environ.get('AWS_S3_SECRET_ACCESS_KEY', '')),
+    'AWS_STORAGE_BUCKET_NAME={0}'.format(os.environ.get('AWS_STORAGE_BUCKET_NAME', '')),
+    'DEBUG={0}'.format(os.environ.get('DEBUG', '')),
+    'TEMPLATE_DEBUG={0}'.format(os.environ.get('TEMPLATE_DEBUG', '')),
+    'DATABASE_URL={0}'.format(os.environ.get('DATABASE_URL', ''))
 )
 ########## END GLOBALS
 
@@ -54,9 +54,9 @@ def cont(cmd, message):
 
 ########## DATABASE MANAGEMENT
 @task
-def syncdb():
-    """Run a syncdb."""
-    local('%(run)s syncdb --noinput' % env)
+def makemigrations():
+    """Setup database."""
+    local('{}(run)s makemigrations'.format(env))
 
 
 @task
@@ -67,9 +67,9 @@ def migrate(app=None):
     :param str app: Django app name to migrate.
     """
     if app:
-        local('%s migrate %s --noinput' % (env.run, app))
+        local('{} migrate {}'.format(env.run, app))
     else:
-        local('%(run)s migrate --noinput' % env)
+        local('{}(run)s migrate '.format(env))
 ########## END DATABASE MANAGEMENT
 
 
@@ -77,48 +77,126 @@ def migrate(app=None):
 @task
 def collectstatic():
     """Collect all static files, and copy them to S3 for production usage."""
-    local('%(run)s collectstatic --noinput' % env)
+    local('{}(run)s collectstatic --noinput'.format(env))
 ########## END FILE MANAGEMENT
 
 
-########## HEROKU MANAGEMENT
+########## AWS MANAGEMENT
 @task
 def bootstrap():
-    """Bootstrap your new application with Heroku, preparing it for a production
-    deployment. This will:
+    """Bootstrap your new application:
 
-        - Create a new Heroku application.
+        - Update & Upgrade EC2 Instance.
         - Install all ``HEROKU_ADDONS``.
         - Sync the database.
         - Apply all database migrations.
         - Initialize New Relic's monitoring add-on.
     """
-    cont('heroku create', "Couldn't create the Heroku app, continue anyway?")
+    cont('sudo apt-get update',
+         "Couldn't update EC2 Instance, continue anyway?")
+    cont('sudo apt-get upgrade',
+         "Couldn't upgrade EC2 Instance, continue anyway?")
+    cont('sudo apt-get install postgresql postgresql-contrib',
+         "Couldn't install PostgresSQL, continue anyway?")
+    cont('sudo su - postgres', "Couldn't login as postgres")
+    cont('sudo apt-get install python-virtualenv',
+         "Couldn't install python-virtualenv, continue anyway?")
+    cd(BASE_DIR)
+    cont('virtualenv env',
+         "Couldn't create a virtual environment, continue anyway?")
+    run('pip install -r requirements.txt')
+    cont('sudo apt-get install libpq-dev python-dev',
+         "Couldn't configure postgres to work with django, continue anyway?")
 
-    for addon in HEROKU_ADDONS:
-        cont('heroku addons:add %s' % addon,
-            "Couldn't add %s to your Heroku app, continue anyway?" % addon)
+    for config in AWS_EC2_CONFIGS:
+        cont('export {0}={1}'.format(config, config),
+             "Couldn't add {} to your bash_rc, continue anyway?".format(config))
 
-    for config in HEROKU_CONFIGS:
-        cont('heroku config:add %s' % config,
-            "Couldn't add %s to your Heroku app, continue anyway?" % config)
+    cont('sudo chmod u+x {}'.format(BASE_DIR('bin/start_gunicorn.bash')),
+         "Couldn't make script executable, continue anyway?")
 
-    cont('git push heroku master',
-            "Couldn't push your application to Heroku, continue anyway?")
 
-    syncdb()
+    cont('sudo apt-get install python-dev',
+         "Couldn't install python-dev, continue anyway?")
+    cont('sudo apt-get install supervisor',
+         "Couldn't install supervisord, continue anyway?")
+
+    cont('sudo apt-get install nginx',
+         "Couldn't install nginx, continue anyway?")
+
+    cont('git push aws master',
+         "Couldn't push application to AWS, continue anyway?")
+
+    cont('mkdir -p {}'.format(BASE_DIR('logs')),
+         "Couldn't create logs folder, continue anyway?")
+    cont('touch {}'.format(BASE_DIR('logs', 'gunicorn_supervisor.log')),
+         "Couldn't create gunicorn_supervisor log file, continue anyway?")
+
+    cont('sudo supervisorctl reread',
+         "Couldn't Reread supervisorctl, continue anyway?")
+
+    cont('sudo supervisorctl update',
+         "Couldn't update supervisorctl , continue anyway?")
+
+    cont('sudo supervisorctl status',
+         "Couldn't get supervisorctl status, continue anyway?")
+
+    cont('sudo supervisorctl restart {{project_name}}',
+         "Couldn't restart supervisorctl, continue anyway?")
+
+    cont('sudo cp {} /etc/nginx/sites-available/{{project_name}}'.format(BASE_DIR('{{project_name}}',
+                                                                                  'conf',
+                                                                                  '{{project_name}}')),
+         "Coundn't copy nginx config file into sites-available directory")
+
+    cont('sudo ln -s /etc/nginx/sites-available/{{project_name}} /etc/nginx/sites-enabled/{{project_name}}',
+         "Couldn't symlink nginx config, continue anyway?")
+
+    cont('sudo service nginx start',
+         "Couldn't start nginx, continue anyway?")
+
+
+
+    makemigrations()
     migrate()
 
-    cont('%(run)s newrelic-admin validate-config - stdout' % env,
-            "Couldn't initialize New Relic, continue anyway?")
+    # cont('%(run)s newrelic-admin validate-config - stdout' % env,
+    #         "Couldn't initialize New Relic, continue anyway?")
+
+########## END AWS MANAGEMENT
 
 
-@task
-def destroy():
-    """Destroy this Heroku application. Wipe it from existance.
+def update_code():
+    with cd(BASE_DIR):
+        local('pip freeze > requirements.txt')
+        local('git add .')
+        print(green("Enter your git commit comment: "))
+        comment = raw_input()
+        try:
+            local('git commit -m "{}"'.format(comment))
+        except Exception as e:
+            print(red(e))
 
-    .. note::
-        This really will completely destroy your application. Think twice.
-    """
-    local('heroku apps:destroy')
-########## END HEROKU MANAGEMENT
+        run('git pull bitbucket master')
+        local('git push -u bitbucket master')
+        local('git push aws master')
+
+
+def deploy():
+    update_code()
+    run('sudo service gunicorn restart')
+
+
+def ss(port=8001):
+    if env.hosts:
+        run('sudo service gunicorn restart')
+    else:
+        local('foreman run ./manage.py runserver {}'.format(port))
+
+
+
+
+
+
+
+
