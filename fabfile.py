@@ -2,28 +2,64 @@
 
 import os
 from fabric.contrib.console import confirm
-from fabric.api import abort, env, local, settings, task, cd, run
+from fabric import api as fab
+from fabric.api import task
 from fabric.colors import green, red
-
-
-# env.hosts = [os.environ.get('ENV')]
+import boto.ec2
 
 ########## GLOBALS
 BASE_DIR = lambda *x: os.path.join(
     os.path.dirname(os.path.dirname(__file__)), *x)
 
-env.run = 'python manage.py'
+fab.env.run = 'python manage.py'
 
-AWS_EC2_CONFIGS = (
-    'DJANGO_SETTINGS_MODULE={{ nginx }}.settings.prod',
+SERVER_USER = 'ubuntu'
+SSH_KEY_FILE = './ssh/' #Replace with path/to/your/.pem/key
+
+CONFIGS = (
+    'DJANGO_SETTINGS_MODULE={{project_name}}.settings',
     'SECRET_KEY={0}'.format(os.environ.get('SECRET_KEY', '')),
+    'AWS_REGION={0}'.format(os.environ.get('AWS_REGION', '')),
     'AWS_ACCESS_KEY_ID={0}'.format(os.environ.get('AWS_S3_ACCESS_KEY_ID', '')),
     'AWS_SECRET_ACCESS_KEY={0}'.format(os.environ.get('AWS_S3_SECRET_ACCESS_KEY', '')),
     'AWS_STORAGE_BUCKET_NAME={0}'.format(os.environ.get('AWS_STORAGE_BUCKET_NAME', '')),
+    'DATABASE_URL={0}'.format(os.environ.get('DATABASE_URL', '')),
     'DEBUG={0}'.format(os.environ.get('DEBUG', '')),
     'TEMPLATE_DEBUG={0}'.format(os.environ.get('TEMPLATE_DEBUG', '')),
-    'DATABASE_URL={0}'.format(os.environ.get('DATABASE_URL', ''))
 )
+
+
+def aws_hosts():
+    #connect to ec2
+    conn = boto.ec2.connect_to_region(
+        os.environ.get('AWS_REGION'),
+        aws_access_key_id=os.environ.get('AWS_S3_ACCESS_KEY_ID'),
+        aws_secret_access_key=os.environ.get('AWS_S3_SECRET_ACCESS_KEY')
+    )
+
+    reservations = conn.get_all_instances()
+
+    instance_ids = []
+    for reservation in reservations:
+        for i in reservation.instances:
+            instance_ids.append(i.id)
+
+    # Get the public CNAMES for those instances.
+    hosts = []
+    for host in conn.get_all_instances(instance_ids):
+        hosts.extend([i.public_dns_name for i in host.instances])
+    hosts.sort() # Put them in a consistent order, so that calling code can do hosts[0] and hosts[1] consistently.
+
+    return hosts
+
+
+def aws():
+    fab.env.hosts = aws_hosts()
+    fab.env.key_filename = SSH_KEY_FILE
+    fab.env.user = SERVER_USER
+    fab.env.parallel = True
+
+
 ########## END GLOBALS
 
 
@@ -44,11 +80,57 @@ def cont(cmd, message):
 
         cont('heroku run ...', "Couldn't complete %s. Continue anyway?" % cmd)
     """
-    with settings(warn_only=True):
-        result = local(cmd, capture=True)
+    with fab.settings(warn_only=True):
+        result = fab.run(cmd, capture=True)
 
     if message and result.failed and not confirm(message):
-        abort('Stopped execution per user request.')
+        fab.abort('Stopped execution per user request.')
+
+
+def l_cont(cmd, message):
+    """Given a command, ``cmd``, and a message, ``message``, allow a user to
+    either continue or break execution if errors occur while executing ``cmd``.
+
+    :param str cmd: The command to execute on the local system.
+    :param str message: The message to display to the user on failure.
+
+    .. note::
+        ``message`` should be phrased in the form of a question, as if ``cmd``'s
+        execution fails, we'll ask the user to press 'y' or 'n' to continue or
+        cancel exeuction, respectively.
+
+    Usage::
+
+        cont('heroku run ...', "Couldn't complete %s. Continue anyway?" % cmd)
+    """
+    with fab.settings(warn_only=True):
+        result = fab.local(cmd, capture=True)
+
+    if message and result.failed and not confirm(message):
+        fab.abort('Stopped execution per user request.')
+
+
+def su_cont(cmd, message):
+    """Given a command, ``cmd``, and a message, ``message``, allow a user to
+    either continue or break execution if errors occur while executing ``cmd``.
+
+    :param str cmd: The command to execute on the local system.
+    :param str message: The message to display to the user on failure.
+
+    .. note::
+        ``message`` should be phrased in the form of a question, as if ``cmd``'s
+        execution fails, we'll ask the user to press 'y' or 'n' to continue or
+        cancel exeuction, respectively.
+
+    Usage::
+
+        cont('heroku run ...', "Couldn't complete %s. Continue anyway?" % cmd)
+    """
+    with fab.settings(warn_only=True):
+        result = fab.sudo(cmd, capture=True)
+
+    if message and result.failed and not confirm(message):
+        fab.abort('Stopped execution per user request.')
 ########## END HELPERS
 
 
@@ -56,7 +138,7 @@ def cont(cmd, message):
 @task
 def makemigrations():
     """Setup database."""
-    local('{}(run)s makemigrations'.format(env))
+    fab.local('{} makemigrations'.format(fab.env.run))
 
 
 @task
@@ -67,9 +149,9 @@ def migrate(app=None):
     :param str app: Django app name to migrate.
     """
     if app:
-        local('{} migrate {}'.format(env.run, app))
+        fab.local('{} migrate {}'.format(fab.env.run, app))
     else:
-        local('{}(run)s migrate '.format(env))
+        fab.local('{} migrate '.format(fab.env.run))
 ########## END DATABASE MANAGEMENT
 
 
@@ -77,135 +159,170 @@ def migrate(app=None):
 @task
 def collectstatic():
     """Collect all static files, and copy them to S3 for production usage."""
-    local('{}(run)s collectstatic --noinput'.format(env))
+    fab.local('{} collectstatic --noinput'.format(fab.env.run))
 ########## END FILE MANAGEMENT
 
 
-########## AWS MANAGEMENT
+@task
+def update_code():
+    fab.local('pip freeze > requirements.txt')
+    fab.local('git add .')
+    print(green('Commit message >>> '))
+    msg = raw_input()
+    l_cont('git commit -m "{}"'.format(msg), 'git commit failed, continue?')
+    fab.local('git pull bitbucket master')
+    fab.local('git push -u bitbucket master')
+    fab.local('git push production master')
+
+    with fab.cd('/home/ubuntu/servers/{{project_name}}/'):
+        fab.run('git pull origin master')
+
+
+@task
+def deploy():
+    update_code()
+    fab.sudo('service gunicorn restart')
+
+
+@task
+def setup_repo():
+    #Setup repo and allow deployment by git
+    if not exists('/usr/bin/git'):
+        fab.sudo('sudo apt-get install git')
+    with fab.cd('/home/ubuntu/'):
+        fab.run('mkdir -p git-repos/{{project_name}}.git')
+        fab.cd('git-repos/{{project_name}}.git')
+        fab.run('git init --bare')
+
+        if not exists('/home/ubuntu/servers/{{project_name}}/', d=1):
+            fab.run('mkdir -p servers/{{project_name}}')
+
+        with fab.cd('servers/{{project_name}}/'):
+            fab.run('git init')
+            fab.run('git remote add origin {{project_name}}:/home/ubuntu/git-repos/{{project_name}}.git')
+    fab.local('git remote add production {{project_name}}:/home/ubuntu/git-repos/{{project_name}}.git')
+    update_code()
+
+
+@task
+def exists(path, d=None):
+    with fab.settings(warn_only=True):
+        if d is None:
+            return fab.run('test -e {}'.format(path))
+        else:
+            return fab.run('test -d {}'.format(path))
+
+@task
+def pip_install(packages):
+    if not exists('/usr/local/bin/pip'):
+        fab.sudo('/usr/bin/easy_install pip')
+    fab.run('pip install {}'.format(' '.join(packages)))
+
+
+def postgres():
+    pass
+
+
+def nginx(state='start'):
+    pass
+
+
+def gunicorn(state='start'):
+    pass
+
+
+
+
+########## AWS SETUP
 @task
 def bootstrap():
     """Bootstrap your new application:
 
         - Update & Upgrade EC2 Instance.
-        - Install all ``HEROKU_ADDONS``.
+        - Install all ``tools & packages``.
         - Sync the database.
         - Apply all database migrations.
         - Initialize New Relic's monitoring add-on.
     """
-    cont('sudo apt-get update',
-         "Couldn't update EC2 Instance, continue anyway?")
 
-    cont('sudo apt-get upgrade',
-         "Couldn't upgrade EC2 Instance, continue anyway?")
+    #Update ubuntu
+    su_cont('apt-get update',
+            "Couldn't update EC2 Instance, continue anyway?")
 
-    cont('sudo apt-get install postgresql postgresql-contrib',
-         "Couldn't install PostgresSQL, continue anyway?")
+    #Upgrade ubuntu
+    su_cont('apt-get upgrade',
+            "Couldn't upgrade EC2 Instance, continue anyway?")
 
-    cont('sudo su - postgres', "Couldn't login as postgres")
-
-    cont('sudo apt-get install python-virtualenv',
-         "Couldn't install python-virtualenv, continue anyway?")
-
-    cd(BASE_DIR)
-    cont('virtualenv env',
-         "Couldn't create a virtual environment, continue anyway?")
-
-    run('pip install -r requirements.txt')
-
-    cont('sudo apt-get install libpq-dev python-dev',
-         "Couldn't configure postgres to work with django, continue anyway?")
-
-    for config in AWS_EC2_CONFIGS:
+    #Add config to .bash_rc
+    for config in CONFIGS:
         cont('export {0}={1}'.format(config, config),
              "Couldn't add {} to your bash_rc, continue anyway?".format(config))
 
-    cont('sudo chmod u+x {}'.format(BASE_DIR('bin/gunicorn_start')),
-         "Couldn't make script executable, continue anyway?")
+    #Install postgreSQL
+    su_cont('apt-get install postgresql postgresql-contrib',
+            "Couldn't install PostgresSQL, continue anyway?")
 
+    # sudo_cont('sudo su - postgres', "Couldn't login as postgres")
 
-    cont('sudo apt-get install python-dev',
-         "Couldn't install python-dev, continue anyway?")
-    cont('sudo apt-get install supervisor',
-         "Couldn't install supervisord, continue anyway?")
+    setup_repo()
 
-    cont('sudo apt-get install nginx',
-         "Couldn't install nginx, continue anyway?")
+    # push local source files to remote instance
+    # update_code()
 
-    cont('git push aws master',
-         "Couldn't push application to AWS, continue anyway?")
+    #Install python virtualenv
+    su_cont('apt-get install python-virtualenv',
+            "Couldn't install python-virtualenv, continue anyway?")
 
-    cont('mkdir -p {}'.format(BASE_DIR('logs')),
-         "Couldn't create logs folder, continue anyway?")
-    cont('touch {}'.format(BASE_DIR('logs', 'gunicorn_supervisor.log')),
+    #Setup virtualenv
+    with fab.cd('/home/ubuntun/servers/{{project_name}}/'):
+        fab.run('virtualenv env')
+        fab.run('source env/bin/activate')
+        fab.run('pip install -r requirements.txt')
+
+    su_cont('apt-get install libpq-dev python-dev',
+            "Couldn't configure postgres to work with django, continue anyway?")
+
+    su_cont('apt-get install python-dev',
+            "Couldn't install python-dev, continue anyway?")
+
+    su_cont('apt-get install supervisor',
+            "Couldn't install supervisord, continue anyway?")
+
+    su_cont('apt-get install nginx',
+            "Couldn't install nginx, continue anyway?")
+
+    cont('touch {}'.format('/home/ubuntu/servers/{{project_name}}/{{project_name}}/logs/gunicorn_supervisor.log'),
          "Couldn't create gunicorn_supervisor log file, continue anyway?")
 
-    cont('sudo supervisorctl reread',
-         "Couldn't Reread supervisorctl, continue anyway?")
+    su_cont('cp /home/ubuntu/servers/{{project_name}}/{{project_name}}/conf/nginx '
+            '/etc/nginx/sites-available/{{project_name}}',
+            "Couldn't copy nginx config file into sites-available directory")
 
-    cont('sudo supervisorctl update',
-         "Couldn't update supervisorctl , continue anyway?")
+    su_cont('ln -s /etc/nginx/sites-available/{{project_name}} /etc/nginx/sites-enabled/{{project_name}}',
+            "Couldn't symlink nginx config, continue anyway?")
 
-    cont('sudo supervisorctl status',
-         "Couldn't get supervisorctl status, continue anyway?")
+    su_cont('cp /home/ubuntu/servers/{{project_name}}/conf/supervisord /etc/supervisor/conf.d/{{project_name}}.conf',
+            "Couldn't copy supervisor conf file, continue?")
 
-    cont('sudo supervisorctl restart {{nginx}}',
-         "Couldn't restart supervisorctl, continue anyway?")
+    su_cont('chmod u+x /home/ubuntu/servers/{{project_name}}/{{project_name}}/bin/gunicorn_start',
+            "Couldn't make script executable, continue anyway?")
 
-    cont('sudo cp {} /etc/nginx/sites-available/{{nginx}}'.format(BASE_DIR('{{nginx}}',
-                                                                                  'conf',
-                                                                                  '{{nginx}}')),
-         "Coundn't copy nginx config file into sites-available directory")
-
-    cont('sudo ln -s /etc/nginx/sites-available/{{nginx}} /etc/nginx/sites-enabled/{{nginx}}',
-         "Couldn't symlink nginx config, continue anyway?")
-
-    cont('sudo service nginx start',
-         "Couldn't start nginx, continue anyway?")
-
-    makemigrations()
     migrate()
 
-    # cont('%(run)s newrelic-admin validate-config - stdout' % env,
-    #         "Couldn't initialize New Relic, continue anyway?")
+    su_cont('service nginx start',
+            "Couldn't start nginx, continue anyway?")
 
+    su_cont('supervisorctl reread',
+            "Couldn't Reread supervisorctl, continue anyway?")
+
+    su_cont('sudo supervisorctl update',
+            "Couldn't update supervisorctl , continue anyway?")
+
+    su_cont('sudo supervisorctl status',
+            "Couldn't get supervisorctl status, continue anyway?")
+
+    su_cont('sudo supervisorctl restart {{project_name}}',
+            "Couldn't restart supervisorctl, continue anyway?")
+    
 ########## END AWS MANAGEMENT
 
-
-def update_code():
-    with cd(BASE_DIR):
-        local('pip freeze > requirements.txt')
-        local('git add .')
-        print(green("Enter your git commit comment: "))
-        comment = raw_input()
-        try:
-            local('git commit -m "{}"'.format(comment))
-        except Exception as e:
-            print(red(e))
-
-        run('git pull bitbucket master')
-        local('git push -u bitbucket master')
-        local('git push aws master')
-
-
-def deploy():
-    update_code()
-    run('sudo service gunicorn restart')
-
-
-def ss(port=8001):
-    if env.hosts:
-        run('sudo service gunicorn restart')
-    else:
-        local('foreman run ./manage.py runserver {}'.format(port))
-
-
-
-
-
-
-
-
-def pip_install(packages):
-    if not exists('/usr/local/bin/pip'):
-        sudo('/usr/bin/easy_install pip')
-    sudo('pip install %s' % ' '.join(packages))

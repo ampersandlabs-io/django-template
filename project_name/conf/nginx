@@ -17,15 +17,15 @@ server {
 
     client_max_body_size 4G;
 
-    access_log /home/ubuntu/{{project_name}}/logs/nginx-access.log;
-    error_log /home/ubuntu/{{project_name}}/logs/nginx-error.log;
+    access_log /home/ubuntu/servers/{{project_name}}/logs/nginx-access.log;
+    error_log /home/ubuntu/servers/{{project_name}}/logs/nginx-error.log;
 
     location /static/ {
-        alias   /home/ubuntu/{{project_name}}/static/;
+        alias   /home/ubuntu/servers/{{project_name}}/static/;
     }
 
     location /media/ {
-        alias   /home/ubuntu/{{project_name}}/media/;
+        alias   /home/ubuntu/servers/{{project_name}}/media/;
     }
 
     location / {
@@ -63,6 +63,6 @@ server {
     # Error pages
     error_page 500 502 503 504 /500.html;
     location = /500.html {
-        root /home/ubuntu/{{project_name}}/static/;
+        root /home/ubuntu/servers/{{project_name}}/static/;
     }
 }

@@ -55,7 +55,6 @@ DJANGO_APPS = (
 )
 
 THIRD_PARTY_APPS = (
-    'south',
     'rest_framework',
     'rest_framework.authtoken',
     'rest_framework_swagger',
@@ -94,7 +93,7 @@ MIDDLEWARE_CLASSES = (
 
 ########## END MIDDLEWARE CONFIGURATION
 
-ROOT_URLCONF = '%s.urls' % r'{{ nginx }}'
+ROOT_URLCONF = '%s.urls' % r'{{ project_name }}'
 # ROOT_URLCONF = '%s.urls' % SITE_NAME
 
 ########## WSGI CONFIGURATION
@@ -154,7 +153,7 @@ STATIC_URL = S3_URL
 STATIC_ROOT = ''
 
 STATICFILES_DIRS = (
-    BASE_DIR('{{ nginx }}', 'static'),
+    BASE_DIR('{{ project_name }}', 'static'),
 )
 
 STATICFILES_FINDERS = (
@@ -169,7 +168,7 @@ TEMPLATE_LOADERS = (
     'django.template.loaders.app_directories.Loader',
 )
 
-TEMPLATE_DIRS = [BASE_DIR('{{ nginx }}', 'templates')]
+TEMPLATE_DIRS = [BASE_DIR('{{ project_name }}', 'templates')]
 
 ########## END AWS, STATIC, TEMPLATE CONFIGURATION
 
@@ -191,7 +190,7 @@ LOGGING = {
         'file': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            'filename': '{{nginx}}.log',
+            'filename': '{{project_name}}.log',
             'formatter': 'verbose'
         },
     },
@@ -201,7 +200,7 @@ LOGGING = {
             'propagate': True,
             'level': 'DEBUG',
         },
-        '{{nginx}}': {
+        '{{project_name}}': {
             'handlers': ['file'],
             'level': 'DEBUG',
         },
@@ -301,7 +300,7 @@ if not DEBUG:
 ########## DJANGO SUIT CONFIGURATION
 SUIT_CONFIG = {
     # header
-    'ADMIN_NAME': '{{ nginx }}',
+    'ADMIN_NAME': '{{ project_name }}',
     # 'MENU_EXCLUDE': ('auth.group',),
 }
 ########## END DJANGO SUIT CONFIGURATION
@@ -346,7 +345,7 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'djblin@gmail.com')
 EMAIL_PORT = os.environ.get('EMAIL_PORT', 587)
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#email-subject-prefix
-EMAIL_SUBJECT_PREFIX = '[%s] ' % '{{ nginx }}'
+EMAIL_SUBJECT_PREFIX = '[%s] ' % '{{ project_name }}'
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#email-use-tls
 EMAIL_USE_TLS = True
