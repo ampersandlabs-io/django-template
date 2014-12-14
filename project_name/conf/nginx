@@ -2,12 +2,12 @@
 # this file must be placed in /etc/nginx/sites-available/ (generally) and named properly.
 # and a link to /etc/nginx/sites-enabled/
 
-upstream {{ project_name }}.com {
+upstream {{ project_name }} {
   # fail_timeout=0 means we always retry an upstream even if it failed
   # to return a good HTTP response (in case the Unicorn master nukes a
   # single worker for timing out).
 
-  server unix:/home/ubuntu/{{project_name}}/run/gunicorn.sock fail_timeout=0;
+  server unix:/home/ubuntu/servers/{{project_name}}/{{project_name}}/run/gunicorn.sock fail_timeout=0;
 }
 
 server {
@@ -17,16 +17,16 @@ server {
 
     client_max_body_size 4G;
 
-    access_log /home/ubuntu/servers/{{project_name}}/logs/nginx-access.log;
-    error_log /home/ubuntu/servers/{{project_name}}/logs/nginx-error.log;
+    access_log /home/ubuntu/servers/{{project_name}}/{{project_name}}/logs/nginx-access.log;
+    error_log /home/ubuntu/servers/{{project_name}}/{{project_name}}/logs/nginx-error.log;
 
-    location /static/ {
-        alias   /home/ubuntu/servers/{{project_name}}/static/;
-    }
+#    location /static/ {
+#        alias   /home/ubuntu/servers/{{project_name}}/{{project_name}}/static/;
+#    }
 
-    location /media/ {
-        alias   /home/ubuntu/servers/{{project_name}}/media/;
-    }
+#    location /media/ {
+#        alias   /home/ubuntu/servers/{{project_name}}/{{project_name}}/media/;
+#    }
 
     location / {
         # an HTTP header important enough to have its own Wikipedia entry:
@@ -55,14 +55,14 @@ server {
         # Try to serve static files from nginx, no point in making an
         # *application* server like Unicorn/Rainbows! serve static files.
         if (!-f $request_filename) {
-            proxy_pass http:/{{ project_name }}.com; #replace with real IP address
+            proxy_pass http://{{ project_name }}; #replace with real IP address
             break;
         }
     }
 
     # Error pages
-    error_page 500 502 503 504 /500.html;
-    location = /500.html {
-        root /home/ubuntu/servers/{{project_name}}/static/;
-    }
+    #error_page 500 502 503 504 /500.html;
+    #location = /500.html {
+    #    root /home/ubuntu/servers/{{project_name}}/{{project_name}}/static/;
+    #}
 }

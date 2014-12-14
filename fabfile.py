@@ -53,11 +53,10 @@ def aws_hosts():
     return hosts
 
 
-def aws():
-    fab.env.hosts = aws_hosts()
-    fab.env.key_filename = SSH_KEY_FILE
-    fab.env.user = SERVER_USER
-    fab.env.parallel = True
+fab.env.hosts = aws_hosts()
+fab.env.key_filename = SSH_KEY_FILE
+fab.env.user = SERVER_USER
+# fab.env.parallel = True
 
 
 ########## END GLOBALS
@@ -104,7 +103,7 @@ def l_cont(cmd, message):
         cont('heroku run ...', "Couldn't complete %s. Continue anyway?" % cmd)
     """
     with fab.settings(warn_only=True):
-        result = fab.local(cmd, capture=True)
+        result = fab.local(cmd)
 
     if message and result.failed and not confirm(message):
         fab.abort('Stopped execution per user request.')
@@ -127,7 +126,7 @@ def su_cont(cmd, message):
         cont('heroku run ...', "Couldn't complete %s. Continue anyway?" % cmd)
     """
     with fab.settings(warn_only=True):
-        result = fab.sudo(cmd, capture=True)
+        result = fab.sudo(cmd)
 
     if message and result.failed and not confirm(message):
         fab.abort('Stopped execution per user request.')
@@ -152,6 +151,14 @@ def migrate(app=None):
         fab.local('{} migrate {}'.format(fab.env.run, app))
     else:
         fab.local('{} migrate '.format(fab.env.run))
+
+
+@task
+def createsuperuser():
+    fab.local('{} createsuperuser'.format(fab.env.run))
+    # if fab.env.hosts:
+    #     fab.run('{} createsuperuser'.format(fab.env.run))
+
 ########## END DATABASE MANAGEMENT
 
 
@@ -187,7 +194,7 @@ def deploy():
 @task
 def setup_repo():
     #Setup repo and allow deployment by git
-    if not exists('/usr/bin/git'):
+    if not exists('/usr/bash_scripts/git'):
         fab.sudo('sudo apt-get install git')
     with fab.cd('/home/ubuntu/'):
         fab.run('mkdir -p git-repos/{{project_name}}.git')
@@ -199,7 +206,11 @@ def setup_repo():
 
         with fab.cd('servers/{{project_name}}/'):
             fab.run('git init')
-            fab.run('git remote add origin {{project_name}}:/home/ubuntu/git-repos/{{project_name}}.git')
+            fab.run('git remote add origin /home/ubuntu/git-repos/{{project_name}}.git')
+            fab.run('mkdir -p {{project_name}}/static')
+            fab.run('mkdir -p {{project_name}}/templates')
+    fab.local('git init')
+    fab.local('git remote add bitbucket git@bitbucket.org:{{project_name}}.git') #replace
     fab.local('git remote add production {{project_name}}:/home/ubuntu/git-repos/{{project_name}}.git')
     update_code()
 
@@ -214,8 +225,8 @@ def exists(path, d=None):
 
 @task
 def pip_install(packages):
-    if not exists('/usr/local/bin/pip'):
-        fab.sudo('/usr/bin/easy_install pip')
+    if not exists('/usr/local/bash_scripts/pip'):
+        fab.sudo('/usr/bash_scripts/easy_install pip')
     fab.run('pip install {}'.format(' '.join(packages)))
 
 
@@ -244,7 +255,6 @@ def bootstrap():
         - Apply all database migrations.
         - Initialize New Relic's monitoring add-on.
     """
-
     #Update ubuntu
     su_cont('apt-get update',
             "Couldn't update EC2 Instance, continue anyway?")
@@ -253,10 +263,12 @@ def bootstrap():
     su_cont('apt-get upgrade',
             "Couldn't upgrade EC2 Instance, continue anyway?")
 
-    #Add config to .bash_rc
+    #Add config to .bashrc
     for config in CONFIGS:
-        cont('export {0}={1}'.format(config, config),
-             "Couldn't add {} to your bash_rc, continue anyway?".format(config))
+        cont('echo export "{0}" >> ~/.bashrc'.format(config),
+             "Couldn't add {} to your .bashrc, continue anyway?".format(config))
+
+    cont('source ~/.bashrc', "Couldn't `source` .bashrc, continue anyway?")
 
     #Install postgreSQL
     su_cont('apt-get install postgresql postgresql-contrib',
@@ -274,25 +286,30 @@ def bootstrap():
             "Couldn't install python-virtualenv, continue anyway?")
 
     #Setup virtualenv
-    with fab.cd('/home/ubuntun/servers/{{project_name}}/'):
+    with fab.cd('/home/ubuntu/servers/{{project_name}}/'):
         fab.run('virtualenv env')
-        fab.run('source env/bin/activate')
-        fab.run('pip install -r requirements.txt')
+        with fab.prefix('source env/bash_scripts/activate'):
+            fab.run('pip install -r requirements.txt')
 
+    #Configure postgres to work with python
     su_cont('apt-get install libpq-dev python-dev',
             "Couldn't configure postgres to work with django, continue anyway?")
 
     su_cont('apt-get install python-dev',
             "Couldn't install python-dev, continue anyway?")
 
+    #Install Supervisor
     su_cont('apt-get install supervisor',
             "Couldn't install supervisord, continue anyway?")
 
+    #Install nginx
     su_cont('apt-get install nginx',
             "Couldn't install nginx, continue anyway?")
 
-    cont('touch {}'.format('/home/ubuntu/servers/{{project_name}}/{{project_name}}/logs/gunicorn_supervisor.log'),
-         "Couldn't create gunicorn_supervisor log file, continue anyway?")
+    #Create supservisor log file
+    with fab.cd('/home/ubuntu/servers/{{project_name}}'):
+        fab.run('mkdir -p logs')
+        fab.run('touch logs/gunicorn_supervisor.log')
 
     su_cont('cp /home/ubuntu/servers/{{project_name}}/{{project_name}}/conf/nginx '
             '/etc/nginx/sites-available/{{project_name}}',
@@ -301,10 +318,11 @@ def bootstrap():
     su_cont('ln -s /etc/nginx/sites-available/{{project_name}} /etc/nginx/sites-enabled/{{project_name}}',
             "Couldn't symlink nginx config, continue anyway?")
 
-    su_cont('cp /home/ubuntu/servers/{{project_name}}/conf/supervisord /etc/supervisor/conf.d/{{project_name}}.conf',
+    su_cont('cp /home/ubuntu/servers/{{project_name}}/{{project_name}}/conf/supervisord '
+            '/etc/supervisor/conf.d/{{project_name}}.conf',
             "Couldn't copy supervisor conf file, continue?")
 
-    su_cont('chmod u+x /home/ubuntu/servers/{{project_name}}/{{project_name}}/bin/gunicorn_start',
+    su_cont('chmod u+x /home/ubuntu/servers/{{project_name}}/{{project_name}}/bash_scripts/gunicorn_start',
             "Couldn't make script executable, continue anyway?")
 
     migrate()
@@ -323,6 +341,6 @@ def bootstrap():
 
     su_cont('sudo supervisorctl restart {{project_name}}',
             "Couldn't restart supervisorctl, continue anyway?")
-    
+
 ########## END AWS MANAGEMENT
 

@@ -4,7 +4,7 @@
 # this file must be placed in /etc/supervisor/conf.d/ (generally) and named properly.
 
 [program:{{project_name}}]
-command = /home/ubuntu/servers/{{project_name}}/{{project_name}}/bin/gunicorn_start     ; Command to start app
+command = /home/ubuntu/servers/{{project_name}}/{{project_name}}/bash_scripts/gunicorn_start     ; Command to start app
 user = ubuntu                                                                           ; User to run as
 stdout_logfile = /home/ubuntu/servers/{{project_name}}/logs/gunicorn_supervisor.log     ; Where to write log messages
 redirect_stderr = true                                                                  ; Save stderr in the same log

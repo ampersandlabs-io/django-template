@@ -172,6 +172,8 @@ TEMPLATE_DIRS = [BASE_DIR('{{ project_name }}', 'templates')]
 
 ########## END AWS, STATIC, TEMPLATE CONFIGURATION
 
+TEST_RUNNER = 'django.test.runner.DiscoverRunner'
+
 ########## LOGGING CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#logging
 LOGGING = {
