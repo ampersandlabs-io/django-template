@@ -12,12 +12,41 @@ https://docs.djangoproject.com/en/1.7/ref/settings/
 from datetime import timedelta
 import os
 import dj_database_url
+import yaml
 
 from djcelery import setup_loader
 
 
 BASE_DIR = lambda *x: os.path.join(
     os.path.dirname(os.path.dirname(__file__)), *x)
+
+
+# load the application configuration file
+APP_CONFIG_FILE = BASE_DIR('conf', 'app_config.yml')
+try:
+    _CONFIGS = yaml.load(open(APP_CONFIG_FILE, 'r'))
+    APP_CONFIG = _CONFIGS['APP']
+
+    _SECRET_KEY = APP_CONFIG.get('SECRET_KEY')
+    _AWS_REGION = APP_CONFIG.get('AWS_REGION')
+    _AWS_ACCESS_KEY = APP_CONFIG.get('AWS_ACCESS_KEY')
+    _AWS_SECRET_ACCESS_KEY = APP_CONFIG.get('AWS_SECRET_ACCESS_KEY')
+    _AWS_STORAGE_BUCKET_NAME = APP_CONFIG.get('AWS_STORAGE_BUCKET_NAME')
+    _DEBUG = APP_CONFIG.get('DEBUG')
+    _TEMPLATE_DEBUG = _DEBUG
+    _DATABASE_URL = APP_CONFIG.get('DATABASE_URL')
+    _TEST_DATABASE_URL = APP_CONFIG.get('TEST_DATABASE_URL')
+except:
+    _SECRET_KEY = os.environ.get('SECRET_KEY')
+    _AWS_REGION = os.environ.get('AWS_REGION')
+    _AWS_ACCESS_KEY = os.environ.get('AWS_ACCESS_KEY')
+    _AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+    _AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
+    _DEBUG = os.environ.get('DEBUG')
+    _TEMPLATE_DEBUG = _DEBUG
+    _DATABASE_URL = os.environ.get('DATABASE_URL')
+    _TEST_DATABASE_URL = os.environ.get('TEST_DATABASE_URL')
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/1.7/howto/deployment/checklist/
@@ -33,10 +62,12 @@ ALLOWED_HOSTS = [
 SECRET_KEY = r'{{ secret_key }}'
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# SECRET_KEY = os.environ.get('SECRET_KEY')
+# SECRET_KEY = _SECRET_KEY
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG') == 'True'
+
+
+DEBUG = _DEBUG == 'True'
 
 TEMPLATE_DEBUG = DEBUG
 
@@ -94,7 +125,6 @@ MIDDLEWARE_CLASSES = (
 ########## END MIDDLEWARE CONFIGURATION
 
 ROOT_URLCONF = '%s.urls' % r'{{ project_name }}'
-# ROOT_URLCONF = '%s.urls' % SITE_NAME
 
 ########## WSGI CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#wsgi-application
@@ -104,8 +134,13 @@ WSGI_APPLICATION = 'wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/1.7/ref/settings/#databases
 
+
+DATABASE_URL = _DATABASE_URL
+TEST_DATABASE_URL = _TEST_DATABASE_URL
+
 DATABASES = {
-    'default': dj_database_url.config()
+    'default': dj_database_url.config(default=DATABASE_URL),
+    'test': dj_database_url.config(default=TEST_DATABASE_URL)
 }
 
 # Internationalization
@@ -144,16 +179,17 @@ STATICFILES_STORAGE = DEFAULT_FILE_STORAGE = 'storages.backends.s3boto.S3BotoSto
 
 AWS_S3_SECURE_URLS = False
 AWS_QUERYSTRING_AUTH = False
-AWS_S3_ACCESS_KEY_ID = os.environ.get('AWS_S3_ACCESS_KEY_ID')
-AWS_S3_SECRET_ACCESS_KEY = os.environ.get('AWS_S3_SECRET_ACCESS_KEY')
-AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
+
+AWS_S3_ACCESS_KEY_ID = _AWS_ACCESS_KEY
+AWS_S3_SECRET_ACCESS_KEY = _AWS_SECRET_ACCESS_KEY
+AWS_STORAGE_BUCKET_NAME = _AWS_STORAGE_BUCKET_NAME
 
 S3_URL = 'http://%s.s3.amazonaws.com/' % AWS_STORAGE_BUCKET_NAME
 STATIC_URL = S3_URL
 STATIC_ROOT = ''
 
 STATICFILES_DIRS = (
-    BASE_DIR('{{ project_name }}', 'static'),
+    BASE_DIR('static'),
 )
 
 STATICFILES_FINDERS = (
@@ -168,7 +204,7 @@ TEMPLATE_LOADERS = (
     'django.template.loaders.app_directories.Loader',
 )
 
-TEMPLATE_DIRS = [BASE_DIR('{{ project_name }}', 'templates')]
+TEMPLATE_DIRS = [BASE_DIR('templates')]
 
 ########## END AWS, STATIC, TEMPLATE CONFIGURATION
 
@@ -251,13 +287,9 @@ LOGGING = {
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#caches
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-    },
-
-    # 'default': {
-    #     'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
-    #     'LOCATION': '127.0.0.1:11211',
-    # }
+        'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+        'LOCATION': 'unix:/home/ubuntu/servers/{{project_name}}/{{project_name}}/run/memcached.sock',
+    }
 }
 ########## END CACHE CONFIGURATION
 

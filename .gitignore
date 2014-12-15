@@ -83,6 +83,6 @@ Icon
 heroku.log
 
 .env
-
+app_config.yaml
 staticfiles
 *.tmp
