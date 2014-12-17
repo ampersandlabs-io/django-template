@@ -26,26 +26,13 @@ APP_CONFIG_FILE = BASE_DIR('{{project_name}}', 'conf', 'app_config.yaml')
 try:
     _CONFIGS = yaml.load(open(APP_CONFIG_FILE, 'r'))
     APP_CONFIG = _CONFIGS['APP']
-
-    _SECRET_KEY = APP_CONFIG.get('SECRET_KEY')
-    _AWS_REGION = APP_CONFIG.get('AWS_REGION')
-    _AWS_ACCESS_KEY = APP_CONFIG.get('AWS_ACCESS_KEY')
-    _AWS_SECRET_ACCESS_KEY = APP_CONFIG.get('AWS_SECRET_ACCESS_KEY')
-    _AWS_STORAGE_BUCKET_NAME = APP_CONFIG.get('AWS_STORAGE_BUCKET_NAME')
-    _DEBUG = APP_CONFIG.get('DEBUG')
-    _TEMPLATE_DEBUG = _DEBUG
-    _DATABASE_URL = APP_CONFIG.get('DATABASE_URL')
-    _TEST_DATABASE_URL = APP_CONFIG.get('TEST_DATABASE_URL')
-except:
-    _SECRET_KEY = os.environ.get('SECRET_KEY')
-    _AWS_REGION = os.environ.get('AWS_REGION')
-    _AWS_ACCESS_KEY = os.environ.get('AWS_ACCESS_KEY')
-    _AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
-    _AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
-    _DEBUG = os.environ.get('DEBUG')
-    _TEMPLATE_DEBUG = _DEBUG
-    _DATABASE_URL = os.environ.get('DATABASE_URL')
-    _TEST_DATABASE_URL = os.environ.get('TEST_DATABASE_URL')
+except IOError:
+    raise RuntimeError(
+        """
+        There was an error loading the application config file: %s \n
+        Please make sure the file exists and does not contain errors \n.
+        """ % APP_CONFIG_FILE
+    )
 
 
 # Quick-start development settings - unsuitable for production
@@ -61,12 +48,11 @@ ALLOWED_HOSTS = [
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = r'{{ secret_key }}'
 
-# SECURITY WARNING: keep the secret key used in production secret!
-# SECRET_KEY = _SECRET_KEY
+# SECRET_KEY = APP_CONFIG.get('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
-DEBUG = _DEBUG
+DEBUG = APP_CONFIG.get('DEBUG')
 
 TEMPLATE_DEBUG = DEBUG
 
@@ -108,6 +94,7 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 ########## MIDDLEWARE CONFIGURATION
 
 MIDDLEWARE_CLASSES = (
+    'django.middleware.cache.UpdateCacheMiddleware',    # This must be first on the list
     # Use GZip compression to reduce bandwidth.
     'django.middleware.gzip.GZipMiddleware',
 
@@ -118,6 +105,7 @@ MIDDLEWARE_CLASSES = (
     'django.contrib.auth.middleware.SessionAuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django.middleware.cache.FetchFromCacheMiddleware',  # This must be last
 )
 
 ########## END MIDDLEWARE CONFIGURATION
@@ -133,8 +121,8 @@ WSGI_APPLICATION = 'wsgi.application'
 # https://docs.djangoproject.com/en/1.7/ref/settings/#databases
 
 
-DATABASE_URL = _DATABASE_URL
-TEST_DATABASE_URL = _TEST_DATABASE_URL
+DATABASE_URL = APP_CONFIG.get('DATABASE_URL')
+TEST_DATABASE_URL = APP_CONFIG.get('TEST_DATABASE_URL')
 
 DATABASES = {
     'default': dj_database_url.config(default=DATABASE_URL),
@@ -178,9 +166,9 @@ STATICFILES_STORAGE = DEFAULT_FILE_STORAGE = 'storages.backends.s3boto.S3BotoSto
 AWS_S3_SECURE_URLS = False
 AWS_QUERYSTRING_AUTH = False
 
-AWS_S3_ACCESS_KEY_ID = _AWS_ACCESS_KEY
-AWS_S3_SECRET_ACCESS_KEY = _AWS_SECRET_ACCESS_KEY
-AWS_STORAGE_BUCKET_NAME = _AWS_STORAGE_BUCKET_NAME
+AWS_S3_ACCESS_KEY_ID = APP_CONFIG.get('AWS_ACCESS_KEY')
+AWS_S3_SECRET_ACCESS_KEY = APP_CONFIG.get('AWS_SECRET_ACCESS_KEY')
+AWS_STORAGE_BUCKET_NAME = APP_CONFIG.get('AWS_STORAGE_BUCKET_NAME')
 
 S3_URL = 'http://%s.s3.amazonaws.com/' % AWS_STORAGE_BUCKET_NAME
 STATIC_URL = S3_URL
@@ -284,10 +272,15 @@ LOGGING = {
 ########## CACHE CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#caches
 CACHES = {
+    # 'default': {
+    #     'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+    #     'LOCATION': 'unix:/home/ubuntu/servers/{{project_name}}/{{project_name}}/run/memcached.sock',
+    # }
+
     'default': {
-        'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
-        'LOCATION': 'unix:/home/ubuntu/servers/{{project_name}}/{{project_name}}/run/memcached.sock',
-    }
+        'BACKEND': 'redis_cache.RedisCache',
+        'LOCATION': APP_CONFIG.get('REDIS_URL'),
+    },
 }
 ########## END CACHE CONFIGURATION
 
@@ -333,7 +326,30 @@ if not DEBUG:
 SUIT_CONFIG = {
     # header
     'ADMIN_NAME': '{{ project_name }}',
+    # 'HEADER_DATE_FORMAT': 'l, j. F Y',
+    # 'HEADER_TIME_FORMAT': 'H:i',
+
+    # forms
+    # 'SHOW_REQUIRED_ASTERISK': True,  # Default True
+    # 'CONFIRM_UNSAVED_CHANGES': True, # Default True
+
+    # menu
+    # 'SEARCH_URL': '/admin/auth/user/',
+    # 'MENU_ICONS': {
+    #    'sites': 'icon-leaf',
+    #    'auth': 'icon-lock',
+    # },
+    # 'MENU_OPEN_FIRST_CHILD': True, # Default True
     # 'MENU_EXCLUDE': ('auth.group',),
+    # 'MENU': (
+    #     'sites',
+    #     {'app': 'auth', 'icon':'icon-lock', 'models': ('user', 'group')},
+    #     {'label': 'Settings', 'icon':'icon-cog', 'models': ('auth.user', 'auth.group')},
+    #     {'label': 'Support', 'icon':'icon-question-sign', 'url': '/support/'},
+    # ),
+
+    # misc
+    # 'LIST_PER_PAGE': 15
 }
 ########## END DJANGO SUIT CONFIGURATION
 
@@ -353,6 +369,23 @@ REST_FRAMEWORK = {
 }
 ########## END REST FRAMEWORK CONFIGURATION
 
+########## SWAGGER SETTINGS
+SWAGGER_SETTINGS = {
+    "exclude_namespaces": [], # List URL namespaces to ignore
+    "api_version": '0.1',  # Specify your API's version
+    "api_path": "/api",  # Specify the path to your API not a root level
+    "enabled_methods": [  # Specify which methods to enable in Swagger UI
+        'get',
+        'post',
+        'put',
+        'patch',
+        'delete'
+    ],
+    "api_key": '', # An API key
+    "is_authenticated": False,  # Set to True to enforce user authentication,
+    "is_superuser": False,  # Set to True to enforce admin only access
+}
+########## END SWAGGER SETTINGS
 
 ########## CORS CONFIGURATION
 CORS_ORIGIN_ALLOW_ALL = True

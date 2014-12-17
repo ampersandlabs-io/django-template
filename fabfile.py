@@ -492,3 +492,14 @@ def bootstrap():
 
 
 ########## END AWS MANAGEMENT
+
+
+@task
+def integrate_logentries():
+    fab.run('wget https://raw.githubusercontent.com/logentries/le/master/install/linux/logentries_install.sh')
+    fab.sudo('bash logentries_install.sh')
+
+
+@task
+def install_redis():
+    fab.sudo('apt-get install redis-server -y')
