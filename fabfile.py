@@ -27,7 +27,8 @@ try:
     AWS_STORAGE_BUCKET_NAME = APP_CONFIG.get('AWS_STORAGE_BUCKET_NAME')
     DEBUG = APP_CONFIG.get('DEBUG')
     TEMPLATE_DEBUG = DEBUG
-except:
+except IOError:
+    #yaml config file missing, use environmental variables instead.
     SECRET_KEY = os.environ.get('SECRET_KEY', '')
     AWS_REGION = os.environ.get('AWS_REGION')
     AWS_ACCESS_KEY = os.environ.get('AWS_ACCESS_KEY')
@@ -295,6 +296,15 @@ def collectstatic():
     fab.local('{} collectstatic --noinput'.format(fab.env.run))
 ########## END FILE MANAGEMENT
 
+@task
+def restart():
+    """
+    Reload nginx/gunicorn
+    """
+    with fab.settings(warn_only=True):
+        fab.sudo("supervisorctl restart {{project_name}}")
+        fab.sudo('/etc/init.d/nginx reload')
+
 
 @task
 def update_code(git_remote='production'):
@@ -320,7 +330,10 @@ def deploy():
     update_code()
     migrate()
     fab.sudo('supervisorctl status gunicorn | sed "s/.*[pid ]\([0-9]\+\)\,.*/\1/" | xargs kill -HUP')
-    # fab.sudo('supervisorctl restart {{project_name}}')
+    # with fab.settings(warn_only=True):
+    #     fab.sudo('supervisorctl restart {{project_name}}')
+    #     fab.sudo('/etc/init.d/nginx reload')
+
 
 
 @task
@@ -405,7 +418,7 @@ def update_gunicorn_start_script():
 
 @task
 def nginx(state='start'):
-    su_cont('service nginx {}'.format(state),
+    su_cont('service nginx {0}'.format(state),
             "Couldn't start nginx, continue anyway?")
 
 
@@ -430,8 +443,8 @@ def bootstrap():
 
     #Add config to .bashrc
     for config in CONFIGS:
-        cont('echo export ""{}"" >> ~/.bashrc'.format(config),
-             "Couldn't add {} to your .bashrc, continue anyway?".format(config))
+        cont('echo \' export {0} \' >> ~/.bashrc'.format(config),
+             "Couldn't add {0} to your .bashrc, continue anyway?".format(config))
 
     cont('source ~/.bashrc', "Couldn't `source` .bashrc, continue anyway?")
 
@@ -480,4 +493,3 @@ def bootstrap():
 
 
 ########## END AWS MANAGEMENT
-
