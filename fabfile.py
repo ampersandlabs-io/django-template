@@ -15,50 +15,29 @@ from contextlib import contextmanager
 BASE_DIR = lambda *x: os.path.join(
     os.path.dirname(os.path.dirname(__file__)), *x)
 
-APP_CONFIG_FILE = BASE_DIR('{{project_name}}', 'conf', 'app_config.yaml')
+APP_CONFIG_FILE = BASE_DIR('playground', 'playground', 'conf', 'app_config.yaml')
 try:
     _CONFIGS = yaml.load(open(APP_CONFIG_FILE, 'r'))
     APP_CONFIG = _CONFIGS['APP']
-
-    SECRET_KEY = APP_CONFIG.get('SECRET_KEY')
-    AWS_REGION = APP_CONFIG.get('AWS_REGION')
-    AWS_ACCESS_KEY = APP_CONFIG.get('AWS_ACCESS_KEY')
-    AWS_SECRET_ACCESS_KEY = APP_CONFIG.get('AWS_SECRET_ACCESS_KEY')
-    AWS_STORAGE_BUCKET_NAME = APP_CONFIG.get('AWS_STORAGE_BUCKET_NAME')
-    DEBUG = APP_CONFIG.get('DEBUG')
-    TEMPLATE_DEBUG = DEBUG
 except IOError:
-    #yaml config file missing, use environmental variables instead.
-    SECRET_KEY = os.environ.get('SECRET_KEY', '')
-    AWS_REGION = os.environ.get('AWS_REGION')
-    AWS_ACCESS_KEY = os.environ.get('AWS_ACCESS_KEY')
-    AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
-    AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
-    DEBUG = os.environ.get('DEBUG')
-    TEMPLATE_DEBUG = DEBUG
+    raise RuntimeError(
+        """
+        There was an error loading the application config file: %s \n
+        Please make sure the file exists and does not contain errors \n.
+        """ % APP_CONFIG_FILE
+    )
 
 SERVER_USER = 'ubuntu'
 SSH_KEY_FILE = '~/.ssh/{{project_name}}.pem' #Replace with path/to/your/.pem/key
 DJANGO_SETTINGS_MODULE = '{{project_name}}.settings'
 
-CONFIGS = (
-    'DJANGO_SETTINGS_MODULE="{{project_name}}.settings"',
-    'SECRET_KEY="{0}"'.format(SECRET_KEY),
-    'AWS_REGION="{0}"'.format(AWS_REGION),
-    'AWS_ACCESS_KEY_ID="{0}"'.format(AWS_ACCESS_KEY),
-    'AWS_SECRET_ACCESS_KEY="{0}"'.format(AWS_SECRET_ACCESS_KEY),
-    'AWS_STORAGE_BUCKET_NAME="{0}"'.format(AWS_STORAGE_BUCKET_NAME),
-    'DEBUG={0}'.format(DEBUG),
-    'TEMPLATE_DEBUG={0}'.format(TEMPLATE_DEBUG),
-)
-
 
 def aws_hosts():
     #connect to ec2
     conn = boto.ec2.connect_to_region(
-        AWS_REGION,
-        aws_access_key_id=AWS_ACCESS_KEY,
-        aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+        APP_CONFIG.get('AWS_REGION'),
+        aws_access_key_id=APP_CONFIG.get('AWS_ACCESS_KEY'),
+        aws_secret_access_key=APP_CONFIG.get('AWS_SECRET_ACCESS_KEY')
     )
 
     reservations = conn.get_all_instances()
@@ -216,36 +195,45 @@ def pip_install(packages):
 @task
 def create_database():
     """Creates PostgreSQL role and database"""
-    global CONFIGS
-    db_configs = (
-        'DATABASE_URL="postgres://{0}:{1}@localhost:5432/{2}"'.format(
-            fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
-        ),
-        'TEST_DATABASE_URL="postgres://{0}:{1}@localhost:5432/{2}_test"'.format(
-            fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
-        ),
-    )
+    with fab.cd('/home/ubuntu/servers/{{project_name}}/{{project_name}}/conf'):
 
-    fab.sudo('psql -c "CREATE USER {0} WITH ENCRYPTED PASSWORD E\'{1}\' NOCREATEDB NOCREATEUSER "'.format(
-        fab.env.psql_user, fab.env.psql_password),
-        user='postgres'
-    )
+        try:
+            config = yaml.load(open('app_config.yaml', 'r'))
+            db_configs = {
+                'DATABASE_URL': '"postgres://{0}:{1}@localhost:5432/{2}"'.format(
+                    fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
+                ),
+                'TEST_DATABASE_URL': '"postgres://{0}:{1}@localhost:5432/{2}_test"'.format(
+                    fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
+                ),
+            }
 
-    fab.sudo('psql -c "CREATE DATABASE {0} WITH OWNER {1}"'.format(
-        fab.env.psql_db, fab.env.psql_user),
-        user='postgres'
-    )
+            fab.sudo('psql -c "CREATE USER {0} WITH ENCRYPTED PASSWORD E\'{1}\' NOCREATEDB NOCREATEUSER "'.format(
+                fab.env.psql_user, fab.env.psql_password),
+                user='postgres'
+            )
 
-    #Test database
-    fab.sudo('psql -c "CREATE DATABASE {0}_test WITH OWNER {1}"'.format(
-        fab.env.psql_db, fab.env.psql_user),
-        user='postgres'
-    )
+            fab.sudo('psql -c "CREATE DATABASE {0} WITH OWNER {1}"'.format(
+                fab.env.psql_db, fab.env.psql_user),
+                user='postgres'
+            )
 
-    fab.run('echo \'export {0}\' >> .bashrc'.format(db_configs[0]))
-    fab.run('echo \'export {0}\' >> .bashrc'.format(db_configs[1]))
+            #Test database
+            fab.sudo('psql -c "CREATE DATABASE {0}_test WITH OWNER {1}"'.format(
+                fab.env.psql_db, fab.env.psql_user),
+                user='postgres'
+            )
 
-    CONFIGS += db_configs
+            config['APP'] = db_configs
+
+            yaml.dump(config, open('app_config.yaml', 'w'))
+        except IOError:
+            raise RuntimeError(
+                """
+                There was an error loading the application config file: %s \n
+                Please make sure the file exists and does not contain errors \n.
+                """ % APP_CONFIG_FILE
+            )
 
 
 @task
@@ -334,7 +322,6 @@ def deploy():
         fab.sudo('/etc/init.d/nginx reload')
 
 
-
 @task
 def setup_project(git_remote='production'):
     """Setup repo and allow deployment by git"""
@@ -355,6 +342,22 @@ def setup_project(git_remote='production'):
             fab.run('touch logs/nginx-error.log')
             fab.run('mkdir -p {{project_name}}/static')
             fab.run('mkdir -p {{project_name}}/templates')
+
+            #Create app_config.yaml, export app configs
+            fab.run('touch {{project_name}}/conf/app_config.yaml')
+            config = {'APP': {
+                'DJANGO_SETTINGS_MODULE': 'playground.settings',
+                'SECRET_KEY': '"'+APP_CONFIG.get('SECRET_KEY')+'"',
+                'AWS_REGION': '"'+APP_CONFIG('AWS_REGION')+'"',
+                'AWS_ACCESS_KEY_ID': '"'+APP_CONFIG('AWS_ACCESS_KEY')+'"',
+                'AWS_SECRET_ACCESS_KEY': '"'+APP_CONFIG('AWS_SECRET_ACCESS_KEY')+'"',
+                'AWS_STORAGE_BUCKET_NAME': '"'+APP_CONFIG('AWS_STORAGE_BUCKET_NAME')+'"',
+                'DEBUG': APP_CONFIG('DEBUG'),
+                'TEMPLATE_DEBUG': APP_CONFIG('TEMPLATE_DEBUG'),
+                'REDIS_URL': '/var/run/redis/redis.sock',
+                'DEFAULT_REDISDB': '&default_rdb 0',
+            }}
+            yaml.dump(config, open('{{project_name}}/conf/app_config.yaml', 'w'))
 
     fab.local('git init')
     fab.local('git remote add bitbucket git@bitbucket.org:drewbrns/{{project_name}}.git') #replace with actual bitbucket url
@@ -392,9 +395,9 @@ def update_supervisord_conf():
             '/etc/supervisor/conf.d/{{project_name}}.conf',
             "Couldn't copy supervisor conf file, continue?")
 
-    #Append app's environmental variables to supervisord conf file
-    su_cont('echo %s >> /etc/supervisor/conf.d/playground.conf' % str((','+','.join(CONFIGS))),
-            "Couldn't appead enviromental variables to playground.conf, continue anyway?")
+    # #Append app's environmental variables to supervisord conf file
+    # su_cont('echo %s >> /etc/supervisor/conf.d/playground.conf' % str((','+','.join(CONFIGS))),
+    #         "Couldn't appead enviromental variables to playground.conf, continue anyway?")
 
     su_cont('supervisorctl reread',
             "Couldn't Reread supervisorctl, continue anyway?")
@@ -439,13 +442,6 @@ def bootstrap():
     #Upgrade ubuntu
     su_cont('apt-get upgrade -y',
             "Couldn't upgrade EC2 Instance, continue anyway?")
-
-    #Add config to .bashrc
-    for config in CONFIGS:
-        cont('echo \' export {0} \' >> ~/.bashrc'.format(config),
-             "Couldn't add {0} to your .bashrc, continue anyway?".format(config))
-
-    cont('source ~/.bashrc', "Couldn't `source` .bashrc, continue anyway?")
 
     #Install postgreSQL & configue it to work with python/django
     su_cont('apt-get install postgresql postgresql-contrib -y',
