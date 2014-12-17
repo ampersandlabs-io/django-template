@@ -15,7 +15,7 @@ from contextlib import contextmanager
 BASE_DIR = lambda *x: os.path.join(
     os.path.dirname(os.path.dirname(__file__)), *x)
 
-APP_CONFIG_FILE = BASE_DIR('{{project_name}}', '{{project_name}}', 'conf', 'app_config.yaml')
+APP_CONFIG_FILE = BASE_DIR('{{project_name}}', 'conf', 'app_config.yaml')
 try:
     _CONFIGS = yaml.load(open(APP_CONFIG_FILE, 'r'))
     APP_CONFIG = _CONFIGS['APP']
@@ -87,7 +87,6 @@ fab.env.psql_password = '{{project_name}}'
 fab.env.psql_db = '{{project_name}}_v1'
 fab.env.venv_path = '/home/ubuntu/servers/{{project_name}}'
 fab.env.proj_dirname = '/home/ubuntu/servers/{{project_name}}'
-fab.env.manage_path = '/home/ubuntu/servers/{{project_name}}/{{project_name}}/bash_scripts/mange.sh'
 # fab.env.parallel = True
 
 ########## END GLOBALS
@@ -280,14 +279,12 @@ def migrate(app=None):
 
     :param str app: Django app name to migrate.
     """
-    if app:
-        fab.sudo('{0} {1} migrate {2} --settings={3}'.format(
-            fab.env.run, fab.env.manage_path, app, DJANGO_SETTINGS_MODULE
-        ))
-    else:
-        fab.sudo('{0} {1} migrate --settings={2}'.format(
-            fab.env.run, fab.env.manage_path, DJANGO_SETTINGS_MODULE
-        ))
+    with fab.cd('/home/ubuntu/servers/{{project_name}}/'):
+        with fab.prefix('source env/bin/activate'):
+            if app:
+                fab.run('{} migrate {} --settings={}'.format(fab.env.run, app, DJANGO_SETTINGS_MODULE))
+            else:
+                fab.run('{} migrate --settings={}'.format(fab.env.run, DJANGO_SETTINGS_MODULE))
                         
 ########## END DATABASE MANAGEMENT
 
@@ -332,10 +329,9 @@ def deploy():
     """Commit & push codebase to remotes, restart gunicorn server"""
     update_code()
     migrate()
-    fab.sudo('supervisorctl status gunicorn | sed "s/.*[pid ]\([0-9]\+\)\,.*/\1/" | xargs kill -HUP')
-    # with fab.settings(warn_only=True):
-    #     fab.sudo('supervisorctl restart {{project_name}}')
-    #     fab.sudo('/etc/init.d/nginx reload')
+    with fab.settings(warn_only=True):
+        fab.sudo('supervisorctl restart {{project_name}}')
+        fab.sudo('/etc/init.d/nginx reload')
 
 
 
@@ -359,7 +355,6 @@ def setup_project(git_remote='production'):
             fab.run('touch logs/nginx-error.log')
             fab.run('mkdir -p {{project_name}}/static')
             fab.run('mkdir -p {{project_name}}/templates')
-            fab.sudo('chmod u+x /home/ubuntu/servers/{{project_name}}/{{project_name}}/bash_scripts/manage.sh')
 
     fab.local('git init')
     fab.local('git remote add bitbucket git@bitbucket.org:drewbrns/{{project_name}}.git') #replace with actual bitbucket url
@@ -491,9 +486,9 @@ def bootstrap():
     update_nginx_conf()
 
     collectstatic()
-    migrate()
+    # migrate()
 
-    nginx(state='restart')
+    restart()
 
 
 ########## END AWS MANAGEMENT
