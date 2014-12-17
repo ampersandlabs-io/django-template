@@ -22,7 +22,7 @@ BASE_DIR = lambda *x: os.path.join(
 
 
 # load the application configuration file
-APP_CONFIG_FILE = BASE_DIR('conf', 'app_config.yml')
+APP_CONFIG_FILE = BASE_DIR('{{project_name}}', 'conf', 'app_config.yaml')
 try:
     _CONFIGS = yaml.load(open(APP_CONFIG_FILE, 'r'))
     APP_CONFIG = _CONFIGS['APP']
@@ -66,11 +66,9 @@ SECRET_KEY = r'{{ secret_key }}'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
-
-DEBUG = _DEBUG == 'True'
+DEBUG = _DEBUG
 
 TEMPLATE_DEBUG = DEBUG
-
 
 ########## APPLICATION DEFINITION
 
@@ -189,7 +187,7 @@ STATIC_URL = S3_URL
 STATIC_ROOT = ''
 
 STATICFILES_DIRS = (
-    BASE_DIR('static'),
+    BASE_DIR('{{project_name}}', 'static'),
 )
 
 STATICFILES_FINDERS = (
@@ -204,7 +202,7 @@ TEMPLATE_LOADERS = (
     'django.template.loaders.app_directories.Loader',
 )
 
-TEMPLATE_DIRS = [BASE_DIR('templates')]
+TEMPLATE_DIRS = [BASE_DIR('{{project_name}}', 'templates')]
 
 ########## END AWS, STATIC, TEMPLATE CONFIGURATION
 

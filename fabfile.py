@@ -8,12 +8,14 @@ from fabric import api as fab
 from fabric.api import task
 from fabric.colors import green, red
 import boto.ec2
+from contextlib import contextmanager
+
 
 ########## GLOBALS
 BASE_DIR = lambda *x: os.path.join(
     os.path.dirname(os.path.dirname(__file__)), *x)
 
-APP_CONFIG_FILE = BASE_DIR('conf', 'app_config.yml')
+APP_CONFIG_FILE = BASE_DIR('{{project_name}}', '{{project_name}}', 'conf', 'app_config.yaml')
 try:
     _CONFIGS = yaml.load(open(APP_CONFIG_FILE, 'r'))
     APP_CONFIG = _CONFIGS['APP']
@@ -34,19 +36,17 @@ except:
     DEBUG = os.environ.get('DEBUG')
     TEMPLATE_DEBUG = DEBUG
 
-fab.env.run = 'python manage.py'
-
 SERVER_USER = 'ubuntu'
 SSH_KEY_FILE = '~/.ssh/{{project_name}}.pem' #Replace with path/to/your/.pem/key
 DJANGO_SETTINGS_MODULE = '{{project_name}}.settings'
 
 CONFIGS = (
-    'DJANGO_SETTINGS_MODULE={{project_name}}.settings',
-    'SECRET_KEY={0}'.format(SECRET_KEY),
-    'AWS_REGION={0}'.format(AWS_REGION),
-    'AWS_ACCESS_KEY_ID={0}'.format(AWS_ACCESS_KEY),
-    'AWS_SECRET_ACCESS_KEY={0}'.format(AWS_SECRET_ACCESS_KEY),
-    'AWS_STORAGE_BUCKET_NAME={0}'.format(AWS_STORAGE_BUCKET_NAME),
+    'DJANGO_SETTINGS_MODULE="{{project_name}}.settings"',
+    'SECRET_KEY="{0}"'.format(SECRET_KEY),
+    'AWS_REGION="{0}"'.format(AWS_REGION),
+    'AWS_ACCESS_KEY_ID="{0}"'.format(AWS_ACCESS_KEY),
+    'AWS_SECRET_ACCESS_KEY="{0}"'.format(AWS_SECRET_ACCESS_KEY),
+    'AWS_STORAGE_BUCKET_NAME="{0}"'.format(AWS_STORAGE_BUCKET_NAME),
     'DEBUG={0}'.format(DEBUG),
     'TEMPLATE_DEBUG={0}'.format(TEMPLATE_DEBUG),
 )
@@ -59,26 +59,33 @@ def aws_hosts():
         aws_access_key_id=AWS_ACCESS_KEY,
         aws_secret_access_key=AWS_SECRET_ACCESS_KEY
     )
-    
+
     reservations = conn.get_all_instances()
 
     instance_ids = []
+    instance_ids_append = instance_ids.append
     for reservation in reservations:
         for i in reservation.instances:
-            instance_ids.append(i.id)
+            instance_ids_append(i.id)
 
     # Get the public CNAMES for those instances.
     hosts = []
+    hosts_extend = hosts.extend
     for host in conn.get_all_instances(instance_ids):
-        hosts.extend([i.public_dns_name for i in host.instances])
+        hosts_extend([i.public_dns_name for i in host.instances])
     hosts.sort() # Put them in a consistent order, so that calling code can do hosts[0] and hosts[1] consistently.
-
     return hosts
 
 
 fab.env.hosts = aws_hosts()
 fab.env.key_filename = SSH_KEY_FILE
 fab.env.user = SERVER_USER
+fab.env.run = 'python manage.py'
+fab.env.psql_user = '{{project_name}}_admin'
+fab.env.psql_password = '{{project_name}}'
+fab.env.psql_db = '{{project_name}}_v1'
+fab.env.venv_path = '/home/ubuntu/servers/{{project_name}}'
+fab.env.proj_dirname = '/home/ubuntu/servers/{{project_name}}'
 # fab.env.parallel = True
 
 ########## END GLOBALS
@@ -164,28 +171,80 @@ def exists(path, d=None):
             return fab.run('test -d {}'.format(path))
 
 
+@task()
+def update():
+    """
+    Update system
+    """
+    fab.sudo("apt-get update -y -q")
+    fab.sudo("apt-get upgrade -y -q")
+
+
+@contextmanager
+def virtualenv():
+    """
+    Runs commands within the project's virtualenv.
+    """
+    with fab.cd(fab.env.venv_path): # /home/ubuntu/servers/django_base
+        with fab.prefix("source {}/env/bin/activate".format(fab.env.venv_path)):
+            yield
+
+
+@contextmanager
+def project():
+    """
+    Runs commands within the project's directory.
+    """
+    with virtualenv():
+        with fab.cd(fab.env.proj_dirname):
+            yield
+
+
 @task
 def pip_install(packages):
     """pip install packages"""
     if not exists('/usr/local/bin/pip'):
         fab.sudo('/usr/bin/easy_install pip')
-    fab.run('pip install {}'.format(' '.join(packages)))
-        
+    with virtualenv():
+        fab.run('pip install {}'.format(' '.join(packages)))
+
 ########## END HELPERS
 
 
 ########## DATABASE MANAGEMENT
 @task
-def create_database(db_user, db_pass, db):
+def create_database():
     """Creates PostgreSQL role and database"""
-    fab.sudo('psql -c "CREATE USER {0} WITH NOCREATEDB NOCREATEUSER " \
-             "ENCRYPTED PASSWORD E\'{1}\'"'.format(db_user, db_pass),
-             user='postgres')
-    fab.sudo('psql -c "CREATE DATABASE {0} WITH OWNER {1}"'.format(db, db_user), 
-             user='postgres')
-    fab.run('echo export "{0}" >> .bashrc'.format(
-        'DATABASE_URL=postgres://{0}:{0}@localhost:5432/{0}'.format(db_user, db_pass, db)
-    ))
+    global CONFIGS
+    db_configs = (
+        'DATABASE_URL="postgres://{0}:{1}@localhost:5432/{2}"'.format(
+            fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
+        ),
+        'TEST_DATABASE_URL="postgres://{0}:{1}@localhost:5432/{2}_test"'.format(
+            fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
+        ),
+    )
+
+    fab.sudo('psql -c "CREATE USER {0} WITH ENCRYPTED PASSWORD E\'{1}\' NOCREATEDB NOCREATEUSER "'.format(
+        fab.env.psql_user, fab.env.psql_password),
+        user='postgres'
+    )
+
+    fab.sudo('psql -c "CREATE DATABASE {0} WITH OWNER {1}"'.format(
+        fab.env.psql_db, fab.env.psql_user),
+        user='postgres'
+    )
+
+    #Test database
+    fab.sudo('psql -c "CREATE DATABASE {0}_test WITH OWNER {1}"'.format(
+        fab.env.psql_db, fab.env.psql_user),
+        user='postgres'
+    )
+
+    fab.run('echo \'export {0}\' >> .bashrc'.format(db_configs[0]))
+    fab.run('echo \'export {0}\' >> .bashrc'.format(db_configs[1]))
+
+    CONFIGS += db_configs
 
 
 @task
@@ -222,7 +281,7 @@ def migrate(app=None):
     with fab.cd('/home/ubuntu/servers/{{project_name}}/'):
         with fab.prefix('source env/bin/activate'):
             if app:
-                fab.run('{} migrate {} --settings={}'.format(fab.env.run, app,DJANGO_SETTINGS_MODULE))
+                fab.run('{} migrate {} --settings={}'.format(fab.env.run, app, DJANGO_SETTINGS_MODULE))
             else:
                 fab.run('{} migrate --settings={}'.format(fab.env.run, DJANGO_SETTINGS_MODULE))
                         
@@ -233,7 +292,7 @@ def migrate(app=None):
 @task
 def collectstatic():
     """Collect all static files, and copy them to S3 for production usage."""
-    fab.local('{} collectstatic --noinput'.format('foreman run ./manage.py'))
+    fab.local('{} collectstatic --noinput'.format(fab.env.run))
 ########## END FILE MANAGEMENT
 
 
@@ -251,7 +310,7 @@ def update_code(git_remote='production'):
 
     with fab.cd('/home/ubuntu/servers/{{project_name}}/'):
         fab.run('git pull origin master')
-        with fab.prefix('source env/bin/activate'):
+        with virtualenv():
             fab.run('pip install -r requirements.txt')
 
 
@@ -265,36 +324,44 @@ def deploy():
 
 
 @task
-def setup_project():
+def setup_project(git_remote='production'):
     """Setup repo and allow deployment by git"""
     if not exists('/usr/bin/git'):
-        fab.sudo('sudo apt-get install git')
+        fab.sudo('sudo apt-get install git -y')
+        fab.run('mkdir -p git-repos/{{project_name}}.git')
+        fab.run('mkdir -p servers/{{project_name}}')
     with fab.cd('/home/ubuntu/'):
-        with fab.cd('git-repos/{{project_name}}.git'):
+        with fab.cd('/home/ubuntu/git-repos/{{project_name}}.git'):
             fab.run('git init --bare')
-
-        if not exists('/home/ubuntu/servers/{{project_name}}/', d=1):
-            fab.run('mkdir -p servers/{{project_name}}')
-
-        with fab.cd('servers/{{project_name}}/'):
+        with fab.cd('/home/ubuntu/servers/{{project_name}}/'):
             fab.run('git init')
+            fab.run('virtualenv env') #Setup virtualenv
             fab.run('git remote add origin /home/ubuntu/git-repos/{{project_name}}.git')
             fab.run('mkdir -p logs')
-            fab.run('touch logs/gunicorn_supervisor.log')            
+            fab.run('touch logs/gunicorn_supervisor.log')
+            fab.run('touch logs/nginx-access.log')
+            fab.run('touch logs/nginx-error.log')
             fab.run('mkdir -p {{project_name}}/static')
-            fab.run('mkdir -p {{project_name}}/templates')  
-                      
+            fab.run('mkdir -p {{project_name}}/templates')
+
     fab.local('git init')
-    fab.local('git remote add bitbucket git@bitbucket.org:drewbrns/{{project_name}}.git')
+    fab.local('git remote add bitbucket git@bitbucket.org:drewbrns/{{project_name}}.git') #replace with actual bitbucket url
     fab.local('git remote add production {{project_name}}:/home/ubuntu/git-repos/{{project_name}}.git')
-    update_code()
-    
-    #Setup virtualenv
+    fab.local('pip freeze > requirements.txt')
+    fab.local('git add .gitignore')
+    fab.local('git commit -m"Add .gitignore"')
+    fab.local('git add .')
+    fab.local('git commit -m"Initial project setup"')
+    fab.local('git push -u bitbucket master')
+    fab.local('git push -u bitbucket master')
+    fab.local('git push -u {} master'.format(git_remote))
+    fab.local('git push -u {} master'.format(git_remote))
+
     with fab.cd('/home/ubuntu/servers/{{project_name}}/'):
-        fab.run('virtualenv env')
-        with fab.prefix('source env/bin/activate'):
+        fab.run('git pull origin master')
+        with virtualenv():
             fab.run('pip install -r requirements.txt')
-    
+
 
 
 @task
@@ -312,7 +379,11 @@ def update_supervisord_conf():
     su_cont('cp /home/ubuntu/servers/{{project_name}}/{{project_name}}/conf/supervisord.conf '
             '/etc/supervisor/conf.d/{{project_name}}.conf',
             "Couldn't copy supervisor conf file, continue?")
-            
+
+    #Append app's environmental variables to supervisord conf file
+    su_cont('echo %s >> /etc/supervisor/conf.d/playground.conf' % str((','+','.join(CONFIGS))),
+            "Couldn't appead enviromental variables to playground.conf, continue anyway?")
+
     su_cont('supervisorctl reread',
             "Couldn't Reread supervisorctl, continue anyway?")
 
@@ -375,7 +446,7 @@ def bootstrap():
             "Couldn't install python-dev, continue anyway?")
             
     #Create db
-    create_database('playgroun_admin', '{{project_name}}', '{{project_name}}_v1')
+    create_database()
 
     #Install memcached
     su_cont('apt-get install memcached -y', 
@@ -401,7 +472,10 @@ def bootstrap():
     update_supervisord_conf()
     
     update_nginx_conf()
-    
+
+    collectstatic()
+    migrate()
+
     nginx(state='restart')
 
 
