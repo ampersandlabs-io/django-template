@@ -87,6 +87,7 @@ fab.env.psql_password = '{{project_name}}'
 fab.env.psql_db = '{{project_name}}_v1'
 fab.env.venv_path = '/home/ubuntu/servers/{{project_name}}'
 fab.env.proj_dirname = '/home/ubuntu/servers/{{project_name}}'
+fab.env.manage_path = '/home/ubuntu/servers/{{project_name}}/{{project_name}}/bash_scripts/mange.sh'
 # fab.env.parallel = True
 
 ########## END GLOBALS
@@ -279,12 +280,14 @@ def migrate(app=None):
 
     :param str app: Django app name to migrate.
     """
-    with fab.cd('/home/ubuntu/servers/{{project_name}}/'):
-        with fab.prefix('source env/bin/activate'):
-            if app:
-                fab.run('{} migrate {} --settings={}'.format(fab.env.run, app, DJANGO_SETTINGS_MODULE))
-            else:
-                fab.run('{} migrate --settings={}'.format(fab.env.run, DJANGO_SETTINGS_MODULE))
+    if app:
+        fab.sudo('{0} {1} migrate {2} --settings={3}'.format(
+            fab.env.run, fab.env.manage_path, app, DJANGO_SETTINGS_MODULE
+        ))
+    else:
+        fab.sudo('{0} {1} migrate --settings={2}'.format(
+            fab.env.run, fab.env.manage_path, DJANGO_SETTINGS_MODULE
+        ))
                         
 ########## END DATABASE MANAGEMENT
 
@@ -356,6 +359,7 @@ def setup_project(git_remote='production'):
             fab.run('touch logs/nginx-error.log')
             fab.run('mkdir -p {{project_name}}/static')
             fab.run('mkdir -p {{project_name}}/templates')
+            fab.sudo('chmod u+x /home/ubuntu/servers/{{project_name}}/{{project_name}}/bash_scripts/manage.sh')
 
     fab.local('git init')
     fab.local('git remote add bitbucket git@bitbucket.org:drewbrns/{{project_name}}.git') #replace with actual bitbucket url
