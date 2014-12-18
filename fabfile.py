@@ -327,28 +327,31 @@ def setup_project(git_remote='production'):
         fab.run('mkdir -p servers/{{project_name}}')
     with fab.cd('/home/ubuntu/'):
         with fab.cd('/home/ubuntu/git-repos/{{project_name}}.git'):
-            fab.run('git init --bare')
+            cont('git init --bare', "git-repos already git initialized, continue anyway?")
         with fab.cd('/home/ubuntu/servers/{{project_name}}/'):
-            fab.run('git init')
+            cont('git init', "`{{project_name}}` already git initialized, continue anyway?")
             fab.run('virtualenv env')  #Setup virtualenv
-            fab.run('git remote add origin /home/ubuntu/git-repos/{{project_name}}.git')
+            cont('git remote add origin /home/ubuntu/git-repos/{{project_name}}.git',
+                 "git remote already added, continue anyway?")
             fab.run('mkdir -p logs')
             fab.run('touch logs/gunicorn_supervisor.log')
             fab.run('touch logs/nginx-access.log')
             fab.run('touch logs/nginx-error.log')
 
     fab.local('git init')
-    fab.local('git remote add bitbucket git@bitbucket.org:drewbrns/{{project_name}}.git')
-    fab.local('git remote add production {{project_name}}:/home/ubuntu/git-repos/{{project_name}}.git')
+    l_cont('git remote add bitbucket git@bitbucket.org:drewbrns/{{project_name}}.git',
+           "`bitbucket` remote already added, continue anyway?")
+    l_cont('git remote add production {{project_name}}:/home/ubuntu/git-repos/{{project_name}}.git',
+           "`production` remote already added, continue anyway?")
     fab.local('pip freeze > requirements.txt')
     fab.local('git add .gitignore')
     fab.local('git commit -m"Add .gitignore"')
     fab.local('git add .')
     fab.local('git commit -m"Initial project setup"')
-    fab.local('git push -u bitbucket master')
-    fab.local('git push -u bitbucket master')
-    fab.local('git push -u {} master'.format(git_remote))
-    fab.local('git push -u {} master'.format(git_remote))
+    l_cont('git push -u bitbucket master',
+           "Couldn't push to `bitbucket` please rectify the problem or continue")
+    l_cont('git push -u {} master'.format(git_remote),
+           "Couldn't push to `production` please rectify the problem or continue")
 
     with fab.cd('/home/ubuntu/servers/{{project_name}}/'):
         fab.run('git pull origin master')
