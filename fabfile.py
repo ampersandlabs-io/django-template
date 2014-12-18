@@ -53,7 +53,8 @@ def aws_hosts():
     hosts_extend = hosts.extend
     for host in conn.get_all_instances(instance_ids):
         hosts_extend([i.public_dns_name for i in host.instances])
-    hosts.sort() # Put them in a consistent order, so that calling code can do hosts[0] and hosts[1] consistently.
+    hosts = filter(lambda x: x != '', hosts)
+    hosts.sort()  # Put them in a consistent order, so that calling code can do hosts[0] and hosts[1] consistently.
     return hosts
 
 
