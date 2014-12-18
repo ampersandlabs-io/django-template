@@ -194,38 +194,36 @@ def pip_install(packages):
 def create_database():
     """Creates PostgreSQL role and database"""
 
-    with fab.cd('/home/ubuntu/{{project_name}}/{{project_name}}/conf'):
+    with open('/tmp/app_config.yaml', 'r') as temp:
 
-        with open('/tmp/app_config.yaml', 'r') as temp:
+        config = yaml.load(temp)
 
-            config = yaml.load(temp)
+        fab.sudo('psql -c "CREATE USER {0} WITH ENCRYPTED PASSWORD E\'{1}\' NOCREATEDB NOCREATEUSER "'.format(
+            fab.env.psql_user, fab.env.psql_password),
+            user='postgres'
+        )
 
-            fab.sudo('psql -c "CREATE USER {0} WITH ENCRYPTED PASSWORD E\'{1}\' NOCREATEDB NOCREATEUSER "'.format(
-                fab.env.psql_user, fab.env.psql_password),
-                user='postgres'
-            )
+        fab.sudo('psql -c "CREATE DATABASE {0} WITH OWNER {1}"'.format(
+            fab.env.psql_db, fab.env.psql_user),
+            user='postgres'
+        )
 
-            fab.sudo('psql -c "CREATE DATABASE {0} WITH OWNER {1}"'.format(
-                fab.env.psql_db, fab.env.psql_user),
-                user='postgres'
-            )
+        #Test database
+        fab.sudo('psql -c "CREATE DATABASE {0}_test WITH OWNER {1}"'.format(
+            fab.env.psql_db, fab.env.psql_user),
+            user='postgres'
+        )
 
-            #Test database
-            fab.sudo('psql -c "CREATE DATABASE {0}_test WITH OWNER {1}"'.format(
-                fab.env.psql_db, fab.env.psql_user),
-                user='postgres'
-            )
+        config['APP']['DATABASE_URL'] = "postgres://{0}:{1}@localhost:5432/{2}".format(
+            fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
+        )
+        config['APP']['TEST_DATABASE_URL'] = "postgres://{0}:{1}@localhost:5432/{2}_test".format(
+            fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
+        )
 
-            config['APP']['DATABASE_URL'] = "postgres://{0}:{1}@localhost:5432/{2}".format(
-                fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
-            )
-            config['APP']['TEST_DATABASE_URL'] = "postgres://{0}:{1}@localhost:5432/{2}_test".format(
-                fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
-            )
-
-            yaml.dump(config, open('/tmp/app_config.yaml', 'w'), default_flow_style=False)
-            fab.put('/tmp/app_config.yaml', '/home/ubuntu/servers/{{project_name}}/{{project_name}}/conf/')
-            os.unlink('/tmp/app_config.yaml')
+        yaml.dump(config, open('/tmp/app_config.yaml', 'w'), default_flow_style=False)
+        fab.put('/tmp/app_config.yaml', '/home/ubuntu/servers/{{project_name}}/{{project_name}}/conf/')
+        os.unlink('/tmp/app_config.yaml')
 
 
 @task
@@ -259,19 +257,17 @@ def migrate(app=None):
 
     :param str app: Django app name to migrate.
     """
-    # if app:
-    #     fab.sudo('{0} migrate {1} --settings={2}'.format(
-    #         fab.env.manage_path, app, DJANGO_SETTINGS_MODULE
-    #     ))
-    # else:
-    #     fab.sudo('{0} migrate --settings={1}'.format(
-    #         fab.env.manage_path, DJANGO_SETTINGS_MODULE
-    #     ))
-
     with virtualenv():
-        with fab.cd('/home/ubuntu/servers/{{project_name}}/'):
-            fab.run('python manage.py help --settings={{project_name}}.settings')
-            # fab.run('python manage.py shell')
+        with fab.cd('/home/ubuntu/servers/playground/'):
+
+            if app:
+                fab.run('{0} migrate {1} --settings={2}'.format(
+                    fab.env.run, app, DJANGO_SETTINGS_MODULE
+                ))
+            else:
+                fab.run('{0} migrate --settings={1}'.format(
+                    fab.env.run, DJANGO_SETTINGS_MODULE
+                ))
                         
 ########## END DATABASE MANAGEMENT
 
@@ -315,7 +311,7 @@ def update_code(git_remote='production'):
 def deploy():
     """Commit & push codebase to remotes, restart gunicorn server"""
     update_code()
-    # migrate()
+    migrate()
     with fab.settings(warn_only=True):
         fab.sudo('supervisorctl restart {{project_name}}')
         fab.sudo('/etc/init.d/nginx reload')
@@ -516,8 +512,8 @@ def bootstrap():
 
     update_nginx_conf()
 
-    # collectstatic()
-    # migrate()
+    collectstatic()
+    migrate()
 
     restart()
 
