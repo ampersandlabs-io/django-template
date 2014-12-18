@@ -370,7 +370,7 @@ def setup_project(git_remote='production'):
         'AWS_STORAGE_BUCKET_NAME': '{0}'.format(APP_CONFIG.get('AWS_STORAGE_BUCKET_NAME')),
         'DEBUG': APP_CONFIG.get('DEBUG'),
         'TEMPLATE_DEBUG': APP_CONFIG.get('TEMPLATE_DEBUG'),
-        'REDIS_URL': "/var/run/redis/redis.sock",
+        'REDIS_URL': "http://127.0.0.1:6379",
         'DEFAULT_REDISDB': "&default_rdb 0"
     }}
     with open('/tmp/app_config.yaml', 'w') as temp:
@@ -435,7 +435,7 @@ def update_app_config():
         'AWS_STORAGE_BUCKET_NAME': '{0}'.format(APP_CONFIG.get('AWS_STORAGE_BUCKET_NAME')),
         'DEBUG': APP_CONFIG.get('DEBUG'),
         'TEMPLATE_DEBUG': APP_CONFIG.get('TEMPLATE_DEBUG'),
-        'REDIS_URL': "/var/run/redis/redis.sock",
+        'REDIS_URL': "http://127.0.0.1:6379",
         'DEFAULT_REDISDB': "&default_rdb 0",
         'DATABASE_URL': "postgres://{0}:{1}@localhost:5432/{2}".format(
             fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
@@ -449,6 +449,18 @@ def update_app_config():
         yaml.dump(config, temp,  default_flow_style=False)
         fab.put('/tmp/app_config.yaml', '/home/ubuntu/servers/{{project_name}}/{{project_name}}/conf/')
         os.unlink('/tmp/app_config.yaml')
+
+
+def update_redis():
+
+    redis_conf_file = BASE_DIR('{{project_name}}', '{{project_name}}', 'conf', 'redis.conf')
+
+    fab.put(redis_conf_file, '/home/ubuntu/servers/{{project_name}}/{{project_name}}/conf/redis.conf')
+    fab.sudo('mv /home/ubuntu/servers/{{project_name}}/{{project_name}}/conf/redis.conf /etc/redis/redis.conf')
+    fab.sudo('service redis-server restart')
+    fab.sudo('usermod -a -G redis {0}'.format(SERVER_USER))
+    restart()
+    fab.run('redis-cli ping')
 
 
 ########## AWS SETUP
