@@ -15,7 +15,7 @@ from contextlib import contextmanager
 BASE_DIR = lambda *x: os.path.join(
     os.path.dirname(os.path.dirname(__file__)), *x)
 
-APP_CONFIG_FILE = BASE_DIR('playground', 'playground', 'conf', 'app_config.yaml')
+APP_CONFIG_FILE = BASE_DIR('{{project_name}}', '{{project_name}}', 'conf', 'app_config.yaml')
 try:
     _CONFIGS = yaml.load(open(APP_CONFIG_FILE, 'r'))
     APP_CONFIG = _CONFIGS['APP']
@@ -36,7 +36,7 @@ def aws_hosts():
     #connect to ec2
     conn = boto.ec2.connect_to_region(
         APP_CONFIG.get('AWS_REGION'),
-        aws_access_key_id=APP_CONFIG.get('AWS_ACCESS_KEY'),
+        aws_access_key_id=APP_CONFIG.get('AWS_ACCESS_KEY_ID'),
         aws_secret_access_key=APP_CONFIG.get('AWS_SECRET_ACCESS_KEY')
     )
 
@@ -66,6 +66,7 @@ fab.env.psql_password = '{{project_name}}'
 fab.env.psql_db = '{{project_name}}_v1'
 fab.env.venv_path = '/home/ubuntu/servers/{{project_name}}'
 fab.env.proj_dirname = '/home/ubuntu/servers/{{project_name}}'
+fab.env.manage_path = '/home/ubuntu/servers/{{project_name}}/{{project_name}}/bash_scripts/manage.sh'
 # fab.env.parallel = True
 
 ########## END GLOBALS
@@ -142,13 +143,10 @@ def su_cont(cmd, message):
 
 
 @task
-def exists(path, d=None):
+def exists(path):
     """Check if file or directory exists"""
     with fab.settings(warn_only=True):
-        if d is None:
-            return fab.run('test -e {}'.format(path))
-        else:
-            return fab.run('test -d {}'.format(path))
+        return fab.run('test -e {}'.format(path))
 
 
 @task()
@@ -195,18 +193,12 @@ def pip_install(packages):
 @task
 def create_database():
     """Creates PostgreSQL role and database"""
-    with fab.cd('/home/ubuntu/servers/{{project_name}}/{{project_name}}/conf'):
 
-        try:
-            config = yaml.load(open('app_config.yaml', 'r'))
-            db_configs = {
-                'DATABASE_URL': '"postgres://{0}:{1}@localhost:5432/{2}"'.format(
-                    fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
-                ),
-                'TEST_DATABASE_URL': '"postgres://{0}:{1}@localhost:5432/{2}_test"'.format(
-                    fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
-                ),
-            }
+    with fab.cd('/home/ubuntu/{{project_name}}/{{project_name}}/conf'):
+
+        with open('/tmp/app_config.yaml', 'r') as temp:
+
+            config = yaml.load(temp)
 
             fab.sudo('psql -c "CREATE USER {0} WITH ENCRYPTED PASSWORD E\'{1}\' NOCREATEDB NOCREATEUSER "'.format(
                 fab.env.psql_user, fab.env.psql_password),
@@ -224,16 +216,16 @@ def create_database():
                 user='postgres'
             )
 
-            config['APP'] = db_configs
-
-            yaml.dump(config, open('app_config.yaml', 'w'))
-        except IOError:
-            raise RuntimeError(
-                """
-                There was an error loading the application config file: %s \n
-                Please make sure the file exists and does not contain errors \n.
-                """ % APP_CONFIG_FILE
+            config['APP']['DATABASE_URL'] = "postgres://{0}:{1}@localhost:5432/{2}".format(
+                fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
             )
+            config['APP']['TEST_DATABASE_URL'] = "postgres://{0}:{1}@localhost:5432/{2}_test".format(
+                fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
+            )
+
+            yaml.dump(config, open('/tmp/app_config.yaml', 'w'), default_flow_style=False)
+            fab.put('/tmp/app_config.yaml', '/home/ubuntu/servers/{{project_name}}/{{project_name}}/conf/')
+            os.unlink('/tmp/app_config.yaml')
 
 
 @task
@@ -267,12 +259,19 @@ def migrate(app=None):
 
     :param str app: Django app name to migrate.
     """
-    with fab.cd('/home/ubuntu/servers/{{project_name}}/'):
-        with fab.prefix('source env/bin/activate'):
-            if app:
-                fab.run('{} migrate {} --settings={}'.format(fab.env.run, app, DJANGO_SETTINGS_MODULE))
-            else:
-                fab.run('{} migrate --settings={}'.format(fab.env.run, DJANGO_SETTINGS_MODULE))
+    # if app:
+    #     fab.sudo('{0} migrate {1} --settings={2}'.format(
+    #         fab.env.manage_path, app, DJANGO_SETTINGS_MODULE
+    #     ))
+    # else:
+    #     fab.sudo('{0} migrate --settings={1}'.format(
+    #         fab.env.manage_path, DJANGO_SETTINGS_MODULE
+    #     ))
+
+    with virtualenv():
+        with fab.cd('/home/ubuntu/servers/{{project_name}}/'):
+            fab.run('python manage.py help --settings={{project_name}}.settings')
+            # fab.run('python manage.py shell')
                         
 ########## END DATABASE MANAGEMENT
 
@@ -284,15 +283,15 @@ def collectstatic():
     fab.local('{} collectstatic --noinput'.format(fab.env.run))
 ########## END FILE MANAGEMENT
 
+
 @task
 def restart():
     """
     Reload nginx/gunicorn
     """
     with fab.settings(warn_only=True):
-        fab.sudo("supervisorctl restart {{project_name}}")
+        fab.sudo('supervisorctl restart {{project_name}}')
         fab.sudo('/etc/init.d/nginx reload')
-
 
 @task
 def update_code(git_remote='production'):
@@ -316,7 +315,7 @@ def update_code(git_remote='production'):
 def deploy():
     """Commit & push codebase to remotes, restart gunicorn server"""
     update_code()
-    migrate()
+    # migrate()
     with fab.settings(warn_only=True):
         fab.sudo('supervisorctl restart {{project_name}}')
         fab.sudo('/etc/init.d/nginx reload')
@@ -334,33 +333,15 @@ def setup_project(git_remote='production'):
             fab.run('git init --bare')
         with fab.cd('/home/ubuntu/servers/{{project_name}}/'):
             fab.run('git init')
-            fab.run('virtualenv env') #Setup virtualenv
+            fab.run('virtualenv env')  #Setup virtualenv
             fab.run('git remote add origin /home/ubuntu/git-repos/{{project_name}}.git')
             fab.run('mkdir -p logs')
             fab.run('touch logs/gunicorn_supervisor.log')
             fab.run('touch logs/nginx-access.log')
             fab.run('touch logs/nginx-error.log')
-            fab.run('mkdir -p {{project_name}}/static')
-            fab.run('mkdir -p {{project_name}}/templates')
-
-            #Create app_config.yaml, export app configs
-            fab.run('touch {{project_name}}/conf/app_config.yaml')
-            config = {'APP': {
-                'DJANGO_SETTINGS_MODULE': 'playground.settings',
-                'SECRET_KEY': '"'+APP_CONFIG.get('SECRET_KEY')+'"',
-                'AWS_REGION': '"'+APP_CONFIG('AWS_REGION')+'"',
-                'AWS_ACCESS_KEY_ID': '"'+APP_CONFIG('AWS_ACCESS_KEY')+'"',
-                'AWS_SECRET_ACCESS_KEY': '"'+APP_CONFIG('AWS_SECRET_ACCESS_KEY')+'"',
-                'AWS_STORAGE_BUCKET_NAME': '"'+APP_CONFIG('AWS_STORAGE_BUCKET_NAME')+'"',
-                'DEBUG': APP_CONFIG('DEBUG'),
-                'TEMPLATE_DEBUG': APP_CONFIG('TEMPLATE_DEBUG'),
-                'REDIS_URL': '/var/run/redis/redis.sock',
-                'DEFAULT_REDISDB': '&default_rdb 0',
-            }}
-            yaml.dump(config, open('{{project_name}}/conf/app_config.yaml', 'w'))
 
     fab.local('git init')
-    fab.local('git remote add bitbucket git@bitbucket.org:drewbrns/{{project_name}}.git') #replace with actual bitbucket url
+    fab.local('git remote add bitbucket git@bitbucket.org:drewbrns/{{project_name}}.git')
     fab.local('git remote add production {{project_name}}:/home/ubuntu/git-repos/{{project_name}}.git')
     fab.local('pip freeze > requirements.txt')
     fab.local('git add .gitignore')
@@ -376,7 +357,26 @@ def setup_project(git_remote='production'):
         fab.run('git pull origin master')
         with virtualenv():
             fab.run('pip install -r requirements.txt')
+        fab.run('mkdir -p {{project_name}}/static')
+        fab.run('mkdir -p {{project_name}}/templates')
+        #Create app_config.yaml, export app configs
+        fab.run('touch {{project_name}}/conf/app_config.yaml')
+    config = {'APP': {
+        'DJANGO_SETTINGS_MODULE': '{{project_name}}.settings',
+        'SECRET_KEY': '{0}'.format(APP_CONFIG.get('SECRET_KEY')),
+        'AWS_REGION': '{0}'.format(APP_CONFIG.get('AWS_REGION')),
+        'AWS_ACCESS_KEY_ID': '{0}'.format(APP_CONFIG.get('AWS_ACCESS_KEY_ID')),
+        'AWS_SECRET_ACCESS_KEY': '{0}'.format(APP_CONFIG.get('AWS_SECRET_ACCESS_KEY')),
+        'AWS_STORAGE_BUCKET_NAME': '{0}'.format(APP_CONFIG.get('AWS_STORAGE_BUCKET_NAME')),
+        'DEBUG': APP_CONFIG.get('DEBUG'),
+        'TEMPLATE_DEBUG': APP_CONFIG.get('TEMPLATE_DEBUG'),
+        'REDIS_URL': "/var/run/redis/redis.sock",
+        'DEFAULT_REDISDB': "&default_rdb 0"
+    }}
+    with open('/tmp/app_config.yaml', 'w') as temp:
+        yaml.dump(config, temp,  default_flow_style=False)
 
+    restart()
 
 
 @task
@@ -396,8 +396,8 @@ def update_supervisord_conf():
             "Couldn't copy supervisor conf file, continue?")
 
     # #Append app's environmental variables to supervisord conf file
-    # su_cont('echo %s >> /etc/supervisor/conf.d/playground.conf' % str((','+','.join(CONFIGS))),
-    #         "Couldn't appead enviromental variables to playground.conf, continue anyway?")
+    # su_cont('echo %s >> /etc/supervisor/conf.d/{{project_name}}.conf' % str((','+','.join(CONFIGS))),
+    #         "Couldn't appead enviromental variables to {{project_name}}.conf, continue anyway?")
 
     su_cont('supervisorctl reread',
             "Couldn't Reread supervisorctl, continue anyway?")
@@ -420,8 +420,35 @@ def update_gunicorn_start_script():
 
 @task
 def nginx(state='start'):
-    su_cont('service nginx {0}'.format(state),
+    su_cont('service nginx {}'.format(state),
             "Couldn't start nginx, continue anyway?")
+
+
+@task
+def update_app_config():
+    config = {'APP': {
+        'DJANGO_SETTINGS_MODULE': '{{project_name}}.settings',
+        'SECRET_KEY': '{0}'.format(APP_CONFIG.get('SECRET_KEY')),
+        'AWS_REGION': '{0}'.format(APP_CONFIG.get('AWS_REGION')),
+        'AWS_ACCESS_KEY_ID': '{0}'.format(APP_CONFIG.get('AWS_ACCESS_KEY_ID')),
+        'AWS_SECRET_ACCESS_KEY': '{0}'.format(APP_CONFIG.get('AWS_SECRET_ACCESS_KEY')),
+        'AWS_STORAGE_BUCKET_NAME': '{0}'.format(APP_CONFIG.get('AWS_STORAGE_BUCKET_NAME')),
+        'DEBUG': APP_CONFIG.get('DEBUG'),
+        'TEMPLATE_DEBUG': APP_CONFIG.get('TEMPLATE_DEBUG'),
+        'REDIS_URL': "/var/run/redis/redis.sock",
+        'DEFAULT_REDISDB': "&default_rdb 0",
+        'DATABASE_URL': "postgres://{0}:{1}@localhost:5432/{2}".format(
+            fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
+        ),
+        'TEST_DATABASE_URL': "postgres://{0}:{1}@localhost:5432/{2}_test".format(
+            fab.env.psql_user, fab.env.psql_password, fab.env.psql_db
+        )
+    }}
+
+    with open('/tmp/app_config.yaml', 'w') as temp:
+        yaml.dump(config, temp,  default_flow_style=False)
+        fab.put('/tmp/app_config.yaml', '/home/ubuntu/servers/{{project_name}}/{{project_name}}/conf/')
+        os.unlink('/tmp/app_config.yaml')
 
 
 ########## AWS SETUP
@@ -435,7 +462,7 @@ def bootstrap():
         - Apply all database migrations.
         - Initialize New Relic's monitoring add-on.
     """
-    #Update ubuntu
+    # Update ubuntu
     su_cont('apt-get update -y',
             "Couldn't update EC2 Instance, continue anyway?")
 
@@ -452,40 +479,47 @@ def bootstrap():
 
     su_cont('apt-get install python-dev -y',
             "Couldn't install python-dev, continue anyway?")
-            
-    #Create db
-    create_database()
 
     #Install memcached
-    su_cont('apt-get install memcached -y', 
+    su_cont('apt-get install memcached -y',
             "Couldn't install memcached, continue anyway?")
+
+    #Install redis
+    su_cont('apt-get install redis-server -y',
+            "Couldn't install redis, continue anyway?")
+
+    su_cont('touch /var/run/redis/redis.sock',
+            "Couldn't create redis.sock, continue anyway?")
 
     #Install python virtualenv
     su_cont('apt-get install python-virtualenv -y',
             "Couldn't install python-virtualenv, continue anyway?")
 
+    # Setup Code repo
     setup_project()
+
+    #Create db
+    create_database()
 
     su_cont('apt-get install supervisor -y',
             "Couldn't install supervisord, continue anyway?")
 
     su_cont('apt-get install nginx -y',
             "Couldn't install nginx, continue anyway?")
-            
+
     su_cont('sudo service nginx start',
             "Couldn't start nginx, continue anyway?")
 
     update_gunicorn_start_script()
 
     update_supervisord_conf()
-    
+
     update_nginx_conf()
 
-    collectstatic()
+    # collectstatic()
     # migrate()
 
     restart()
-
 
 ########## END AWS MANAGEMENT
 
@@ -494,8 +528,3 @@ def bootstrap():
 def integrate_logentries():
     fab.run('wget https://raw.githubusercontent.com/logentries/le/master/install/linux/logentries_install.sh')
     fab.sudo('bash logentries_install.sh')
-
-
-@task
-def install_redis():
-    fab.sudo('apt-get install redis-server -y')
