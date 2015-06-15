@@ -50,3 +50,4 @@ sqlparse==0.1.14
 static3==0.5.1
 tablib==0.10.0
 wsgiref==0.1.2
+awsebcli==3.0.10

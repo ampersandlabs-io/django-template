@@ -215,7 +215,7 @@ LOGGING = {
         'file': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            'filename': '{{project_name}}.log',
+            'filename': BASE_DIR('logs', '{{project_name}}.log'),
             'formatter': 'verbose'
         },
     },
