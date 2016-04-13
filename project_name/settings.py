@@ -14,7 +14,7 @@ import os
 import dj_database_url
 import yaml
 
-from djcelery import setup_loader
+# from djcelery import setup_loader
 
 
 BASE_DIR = lambda *x: os.path.join(
@@ -26,13 +26,35 @@ APP_CONFIG_FILE = BASE_DIR('{{project_name}}', 'conf', 'app_config.yaml')
 try:
     _CONFIGS = yaml.load(open(APP_CONFIG_FILE, 'r'))
     APP_CONFIG = _CONFIGS['APP']
+
+    SENDGRID_HOST = APP_CONFIG.get('SENDGRID_HOST')
+    SENDGRID_HOST_USER = APP_CONFIG.get('SENDGRID_HOST_USER')
+    SENDGRID_HOST_PASSWORD = APP_CONFIG.get('SENDGRID_HOST_PASSWORD')
+    _DEBUG = APP_CONFIG.get('DEBUG')
+    _DB_URL = APP_CONFIG.get('DATABASE_URL')
+
+    AWS_S3_ACCESS_KEY_ID = APP_CONFIG.get('AWS_ACCESS_KEY_ID')
+    AWS_S3_SECRET_ACCESS_KEY = APP_CONFIG.get('AWS_SECRET_ACCESS_KEY')
+    AWS_STORAGE_BUCKET_NAME = APP_CONFIG.get('AWS_STORAGE_BUCKET_NAME')
+
 except IOError:
-    raise RuntimeError(
-        """
-        There was an error loading the application config file: %s \n
-        Please make sure the file exists and does not contain errors \n.
-        """ % APP_CONFIG_FILE
-    )
+
+    SENDGRID_HOST = os.environ.get('SENDGRID_HOST')
+    SENDGRID_HOST_USER = os.environ.get('SENDGRID_HOST_USER')
+    SENDGRID_HOST_PASSWORD = os.environ.get('SENDGRID_HOST_PASSWORD')
+    _DEBUG = os.environ.get('DEBUG')
+    _DB_URL = os.environ.get('DATABASE_URL')
+
+    AWS_S3_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
+    AWS_S3_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+    AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
+
+    # raise RuntimeError(
+    #     """
+    #     There was an error loading the application config file: %s \n
+    #     Please make sure the file exists and does not contain errors \n.
+    #     """ % APP_CONFIG_FILE
+    # )
 
 
 # Quick-start development settings - unsuitable for production
@@ -52,7 +74,7 @@ SECRET_KEY = r'{{ secret_key }}'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
-DEBUG = APP_CONFIG.get('DEBUG')
+DEBUG = _DEBUG
 
 TEMPLATE_DEBUG = DEBUG
 
@@ -70,18 +92,18 @@ DJANGO_APPS = (
 )
 
 THIRD_PARTY_APPS = (
-    'rest_framework',
-    'rest_framework.authtoken',
-    'rest_framework_swagger',
-    'taggit',
-    'corsheaders',
-    'imagekit',
+    # 'rest_framework',
+    # 'rest_framework.authtoken',
+    # 'rest_framework_swagger',
+    # 'taggit',
+    # 'corsheaders',
+    # 'imagekit',
 
     # Static file management:
-    'compressor',
+    # 'compressor',
 
     # Asynchronous task queue:
-    'djcelery',
+    # 'djcelery',
 )
 
 LOCAL_APPS = (
@@ -122,12 +144,10 @@ WSGI_APPLICATION = 'wsgi.application'
 # https://docs.djangoproject.com/en/1.7/ref/settings/#databases
 
 
-DATABASE_URL = APP_CONFIG.get('DATABASE_URL')
-TEST_DATABASE_URL = APP_CONFIG.get('TEST_DATABASE_URL')
+DATABASE_URL = _DB_URL
 
 DATABASES = {
-    'default': dj_database_url.config(default=DATABASE_URL),
-    'test': dj_database_url.config(default=TEST_DATABASE_URL)
+    'default': dj_database_url.config(default=DATABASE_URL)
 }
 
 # Internationalization
@@ -167,9 +187,6 @@ STATICFILES_STORAGE = DEFAULT_FILE_STORAGE = 'storages.backends.s3boto.S3BotoSto
 AWS_S3_SECURE_URLS = False
 AWS_QUERYSTRING_AUTH = False
 
-AWS_S3_ACCESS_KEY_ID = APP_CONFIG.get('AWS_ACCESS_KEY_ID')
-AWS_S3_SECRET_ACCESS_KEY = APP_CONFIG.get('AWS_SECRET_ACCESS_KEY')
-AWS_STORAGE_BUCKET_NAME = APP_CONFIG.get('AWS_STORAGE_BUCKET_NAME')
 
 S3_URL = 'http://%s.s3.amazonaws.com/' % AWS_STORAGE_BUCKET_NAME
 STATIC_URL = S3_URL
@@ -272,53 +289,53 @@ LOGGING = {
 
 ########## CACHE CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#caches
-CACHES = {
-    # 'default': {
-    #     'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
-    #     'LOCATION': 'unix:/home/ubuntu/servers/{{project_name}}/{{project_name}}/run/memcached.sock',
-    # }
-
-    'default': {
-        'BACKEND': 'redis_cache.RedisCache',
-        'LOCATION': APP_CONFIG.get('REDIS_URL'),
-    },
-}
+# CACHES = {
+#     # 'default': {
+#     #     'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+#     #     'LOCATION': 'unix:/home/ubuntu/servers/{{project_name}}/{{project_name}}/run/memcached.sock',
+#     # }
+#
+#     'default': {
+#         'BACKEND': 'redis_cache.RedisCache',
+#         'LOCATION': '',
+#     },
+# }
 ########## END CACHE CONFIGURATION
 
 
 ########## COMPRESSION CONFIGURATION
 # See: http://django_compressor.readthedocs.org/en/latest/settings/#django.conf.settings.COMPRESS_ENABLED
-COMPRESS_ENABLED = True
+# COMPRESS_ENABLED = True
 
 # See: http://django-compressor.readthedocs.org/en/latest/settings/#django.conf.settings.COMPRESS_CSS_HASHING_METHOD
-COMPRESS_CSS_HASHING_METHOD = 'content'
+# COMPRESS_CSS_HASHING_METHOD = 'content'
 
 # See: http://django_compressor.readthedocs.org/en/latest/settings/#django.conf.settings.COMPRESS_CSS_FILTERS
-COMPRESS_CSS_FILTERS = [
-    'compressor.filters.template.TemplateFilter',
-]
+# COMPRESS_CSS_FILTERS = [
+#     'compressor.filters.template.TemplateFilter',
+# ]
 
 # See: http://django_compressor.readthedocs.org/en/latest/settings/#django.conf.settings.COMPRESS_JS_FILTERS
-COMPRESS_JS_FILTERS = [
-    'compressor.filters.template.TemplateFilter',
-]
+# COMPRESS_JS_FILTERS = [
+#     'compressor.filters.template.TemplateFilter',
+# ]
 
-if not DEBUG:
-    # See: http://django_compressor.readthedocs.org/en/latest/settings/#django.conf.settings.COMPRESS_OFFLINE
-    COMPRESS_OFFLINE = True
-
-    # See: http://django_compressor.readthedocs.org/en/latest/settings/#django.conf.settings.COMPRESS_STORAGE
-    COMPRESS_STORAGE = DEFAULT_FILE_STORAGE
-
-    # See: http://django_compressor.readthedocs.org/en/latest/settings/#django.conf.settings.COMPRESS_CSS_FILTERS
-    COMPRESS_CSS_FILTERS += [
-        'compressor.filters.cssmin.CSSMinFilter',
-    ]
-
-    # See: http://django_compressor.readthedocs.org/en/latest/settings/#django.conf.settings.COMPRESS_JS_FILTERS
-    COMPRESS_JS_FILTERS += [
-        'compressor.filters.jsmin.JSMinFilter',
-    ]
+# if not DEBUG:
+#     # See: http://django_compressor.readthedocs.org/en/latest/settings/#django.conf.settings.COMPRESS_OFFLINE
+#     COMPRESS_OFFLINE = True
+#
+#     # See: http://django_compressor.readthedocs.org/en/latest/settings/#django.conf.settings.COMPRESS_STORAGE
+#     COMPRESS_STORAGE = DEFAULT_FILE_STORAGE
+#
+#     # See: http://django_compressor.readthedocs.org/en/latest/settings/#django.conf.settings.COMPRESS_CSS_FILTERS
+#     COMPRESS_CSS_FILTERS += [
+#         'compressor.filters.cssmin.CSSMinFilter',
+#     ]
+#
+#     # See: http://django_compressor.readthedocs.org/en/latest/settings/#django.conf.settings.COMPRESS_JS_FILTERS
+#     COMPRESS_JS_FILTERS += [
+#         'compressor.filters.jsmin.JSMinFilter',
+#     ]
 
 ########## END COMPRESSION CONFIGURATION
 
@@ -356,87 +373,70 @@ SUIT_CONFIG = {
 
 
 ########## REST FRAMEWORK CONFIGURATION
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework.authentication.TokenAuthentication',
-    ),
-    # 'DEFAULT_RENDERER_CLASSES': (
-    #     'rest_framework.renderers.JSONRenderer',
-    # ),
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
-    ),
-    'PAGINATE_BY': 10
-}
+# REST_FRAMEWORK = {
+#     'DEFAULT_AUTHENTICATION_CLASSES': (
+#         'rest_framework.authentication.TokenAuthentication',
+#     ),
+#     # 'DEFAULT_RENDERER_CLASSES': (
+#     #     'rest_framework.renderers.JSONRenderer',
+#     # ),
+#     'DEFAULT_PERMISSION_CLASSES': (
+#         'rest_framework.permissions.IsAuthenticated',
+#     ),
+#     'PAGINATE_BY': 10
+# }
 ########## END REST FRAMEWORK CONFIGURATION
 
 ########## SWAGGER SETTINGS
-SWAGGER_SETTINGS = {
-    "exclude_namespaces": [], # List URL namespaces to ignore
-    "api_version": '0.1',  # Specify your API's version
-    "api_path": "/api",  # Specify the path to your API not a root level
-    "enabled_methods": [  # Specify which methods to enable in Swagger UI
-        'get',
-        'post',
-        'put',
-        'patch',
-        'delete'
-    ],
-    "api_key": '', # An API key
-    "is_authenticated": False,  # Set to True to enforce user authentication,
-    "is_superuser": False,  # Set to True to enforce admin only access
-}
+# SWAGGER_SETTINGS = {
+#     "exclude_namespaces": [], # List URL namespaces to ignore
+#     "api_version": '0.1',  # Specify your API's version
+#     "api_path": "/api",  # Specify the path to your API not a root level
+#     "enabled_methods": [  # Specify which methods to enable in Swagger UI
+#         'get',
+#         'post',
+#         'put',
+#         'patch',
+#         'delete'
+#     ],
+#     "api_key": '', # An API key
+#     "is_authenticated": False,  # Set to True to enforce user authentication,
+#     "is_superuser": False,  # Set to True to enforce admin only access
+# }
 ########## END SWAGGER SETTINGS
 
 ########## CORS CONFIGURATION
-CORS_ORIGIN_ALLOW_ALL = True
-CORS_URLS_REGEX = r'^/api/.*$'
-CORS_ALLOW_CREDENTIALS = True
+# CORS_ORIGIN_ALLOW_ALL = True
+# CORS_URLS_REGEX = r'^/api/.*$'
+# CORS_ALLOW_CREDENTIALS = True
 ########## END CORS CONFIGURATION
 
 ########## EMAIL CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#email-backend
+
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#email-host
-EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_HOST = SENDGRID_HOST
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#email-host-password
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_HOST_PASSWORD = SENDGRID_HOST_PASSWORD
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#email-host-user
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'djblin@gmail.com')
+EMAIL_HOST_USER = SENDGRID_HOST_USER
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#email-port
 EMAIL_PORT = os.environ.get('EMAIL_PORT', 587)
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#email-subject-prefix
-EMAIL_SUBJECT_PREFIX = '[%s] ' % '{{ project_name }}'
+EMAIL_SUBJECT_PREFIX = '[%s] ' % 'carcare'
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#email-use-tls
 EMAIL_USE_TLS = True
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#server-email
 SERVER_EMAIL = EMAIL_HOST_USER
-########## END EMAIL CONFIGURATION
+# ######### END EMAIL CONFIGURATION
 
 
-if DEBUG:
-    ########## TOOLBAR CONFIGURATION
-    # See: https://github.com/django-debug-toolbar/django-debug-toolbar#installation
-    INSTALLED_APPS += (
-        'debug_toolbar',
-    )
 
-    # See: https://github.com/django-debug-toolbar/django-debug-toolbar#installation
-    INTERNAL_IPS = ('127.0.0.1',)
-
-    # See: https://github.com/django-debug-toolbar/django-debug-toolbar#installation
-    MIDDLEWARE_CLASSES += (
-        'debug_toolbar.middleware.DebugToolbarMiddleware',
-    )
-
-    DEBUG_TOOLBAR_CONFIG = {
-        'INTERCEPT_REDIRECTS': False,
-    }
-    ########## END TOOLBAR CONFIGURATION
