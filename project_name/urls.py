@@ -7,7 +7,7 @@ admin.autodiscover()
 
 urlpatterns = [
     url(r'^admin/', include(admin.site.urls)),
-    url(r'^admin/doc/', include('django.contrib.admindocs.urls')),
+    # url(r'^admin/doc/', include('django.contrib.admindocs.urls')),
     # url(r'^api/v1.0/docs/', include('rest_framework_swagger.urls')),
     # url(r'^api/v1.0/', include('', namespace='api')),
 ]

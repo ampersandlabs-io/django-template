@@ -37,6 +37,12 @@ try:
     AWS_S3_SECRET_ACCESS_KEY = APP_CONFIG.get('AWS_SECRET_ACCESS_KEY')
     AWS_STORAGE_BUCKET_NAME = APP_CONFIG.get('AWS_STORAGE_BUCKET_NAME')
 
+    # SECURITY WARNING: keep the secret key used in production secret!
+    SECRET_KEY = r'{{ secret_key }}'
+
+    SECRET_KEY = APP_CONFIG.get('SECRET_KEY')
+
+
 except IOError:
 
     SENDGRID_HOST = os.environ.get('SENDGRID_HOST')
@@ -48,6 +54,12 @@ except IOError:
     AWS_S3_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
     AWS_S3_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
     AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
+
+    # SECURITY WARNING: keep the secret key used in production secret!
+    SECRET_KEY = r'{{ secret_key }}'
+
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+
 
     # raise RuntimeError(
     #     """
@@ -67,21 +79,17 @@ ALLOWED_HOSTS = [
     'localhost',
 ]
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = r'{{ secret_key }}'
-
-# SECRET_KEY = APP_CONFIG.get('SECRET_KEY')
+ADMIN_SITE_HEADER = '{{ project_name }}'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
 DEBUG = _DEBUG
 
-TEMPLATE_DEBUG = DEBUG
 
 ########## APPLICATION DEFINITION
 
 DJANGO_APPS = (
-    'suit',
+    #'suit',
     'django.contrib.admin',
     'django.contrib.admindocs',
     'django.contrib.auth',
@@ -112,33 +120,46 @@ LOCAL_APPS = (
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
-########## END APPLICATION DEFINITION
+# ######### END APPLICATION DEFINITION
 
-########## MIDDLEWARE CONFIGURATION
+# ######### MIDDLEWARE CONFIGURATION
 
-MIDDLEWARE_CLASSES = (
-    'django.middleware.cache.UpdateCacheMiddleware',    # This must be first on the list
-    # Use GZip compression to reduce bandwidth.
-    'django.middleware.gzip.GZipMiddleware',
-
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    #'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.auth.middleware.SessionAuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'django.middleware.cache.FetchFromCacheMiddleware',  # This must be last
-)
+]
 
-########## END MIDDLEWARE CONFIGURATION
+# DJANGO 1.9 and below
+
+# MIDDLEWARE_CLASSES = (
+#     'django.middleware.cache.UpdateCacheMiddleware',    # This must be first on the list
+#     # Use GZip compression to reduce bandwidth.
+#     'django.middleware.gzip.GZipMiddleware',
+#
+#     'django.contrib.sessions.middleware.SessionMiddleware',
+#     'django.middleware.common.CommonMiddleware',
+#     'django.middleware.csrf.CsrfViewMiddleware',
+#     'django.contrib.auth.middleware.AuthenticationMiddleware',
+#     'django.contrib.auth.middleware.SessionAuthenticationMiddleware',
+#     'django.contrib.messages.middleware.MessageMiddleware',
+#     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+#     'django.middleware.cache.FetchFromCacheMiddleware',  # This must be last
+# )
+
+# ######### END MIDDLEWARE CONFIGURATION
 
 ROOT_URLCONF = '%s.urls' % r'{{ project_name }}'
 
-########## WSGI CONFIGURATION
+# ######### WSGI CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#wsgi-application
 WSGI_APPLICATION = 'wsgi.application'
-########## END WSGI CONFIGURATION
+# ######### END WSGI CONFIGURATION
 
 # Database
 # https://docs.djangoproject.com/en/1.7/ref/settings/#databases
@@ -169,18 +190,36 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/1.7/howto/static-files/
 
-TEMPLATE_CONTEXT_PROCESSORS = (
-    'django.contrib.auth.context_processors.auth',
-    'django.core.context_processors.debug',
-    'django.core.context_processors.i18n',
-    'django.core.context_processors.media',
-    'django.core.context_processors.static',
-    'django.core.context_processors.tz',
-    'django.contrib.messages.context_processors.messages',
-    'django.core.context_processors.request',
-)
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': ['{{project_name}}/templates',],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
 
-########## AWS, STATIC, TEMPLATE CONFIGURATION
+# Django 1.9 and below
+
+# TEMPLATE_CONTEXT_PROCESSORS = (
+#     'django.contrib.auth.context_processors.auth',
+#     'django.core.context_processors.debug',
+#     'django.core.context_processors.i18n',
+#     'django.core.context_processors.media',
+#     'django.core.context_processors.static',
+#     'django.core.context_processors.tz',
+#     'django.contrib.messages.context_processors.messages',
+#     'django.core.context_processors.request',
+# )
+
+# ######### AWS, STATIC, TEMPLATE CONFIGURATION
 
 STATICFILES_STORAGE = DEFAULT_FILE_STORAGE = 'storages.backends.s3boto.S3BotoStorage'
 
@@ -196,19 +235,20 @@ STATICFILES_DIRS = (
     BASE_DIR('{{project_name}}', 'static'),
 )
 
-STATICFILES_FINDERS = (
-    'django.contrib.staticfiles.finders.FileSystemFinder',
-    'django.contrib.staticfiles.finders.AppDirectoriesFinder',
-    'compressor.finders.CompressorFinder',
-)
-
-# See: https://docs.djangoproject.com/en/dev/ref/settings/#template-loaders
-TEMPLATE_LOADERS = (
-    'django.template.loaders.filesystem.Loader',
-    'django.template.loaders.app_directories.Loader',
-)
-
-TEMPLATE_DIRS = [BASE_DIR('{{project_name}}', 'templates')]
+# django 1.9 and below
+# STATICFILES_FINDERS = (
+#     'django.contrib.staticfiles.finders.FileSystemFinder',
+#     'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+#     'compressor.finders.CompressorFinder',
+# )
+#
+# # See: https://docs.djangoproject.com/en/dev/ref/settings/#template-loaders
+# TEMPLATE_LOADERS = (
+#     'django.template.loaders.filesystem.Loader',
+#     'django.template.loaders.app_directories.Loader',
+# )
+#
+# TEMPLATE_DIRS = [BASE_DIR('{{project_name}}', 'templates')]
 
 ########## END AWS, STATIC, TEMPLATE CONFIGURATION
 
@@ -216,38 +256,38 @@ TEST_RUNNER = 'django.test.runner.DiscoverRunner'
 
 ########## LOGGING CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#logging
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s",
-            'datefmt': "%d/%b/%Y %H:%M:%S"
-        },
-        'simple': {
-            'format': '%(levelname)s %(message)s'
-        },
-    },
-    'handlers': {
-        'file': {
-            'level': 'DEBUG',
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR('logs', '{{project_name}}.log'),
-            'formatter': 'verbose'
-        },
-    },
-    'loggers': {
-        'django': {
-            'handlers': ['file'],
-            'propagate': True,
-            'level': 'DEBUG',
-        },
-        '{{project_name}}': {
-            'handlers': ['file'],
-            'level': 'DEBUG',
-        },
-    }
-}
+# LOGGING = {
+#     'version': 1,
+#     'disable_existing_loggers': False,
+#     'formatters': {
+#         'verbose': {
+#             'format': "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s",
+#             'datefmt': "%d/%b/%Y %H:%M:%S"
+#         },
+#         'simple': {
+#             'format': '%(levelname)s %(message)s'
+#         },
+#     },
+#     'handlers': {
+#         'file': {
+#             'level': 'DEBUG',
+#             'class': 'logging.FileHandler',
+#             'filename': BASE_DIR('logs', '{{project_name}}.log'),
+#             'formatter': 'verbose'
+#         },
+#     },
+#     'loggers': {
+#         'django': {
+#             'handlers': ['file'],
+#             'propagate': True,
+#             'level': 'DEBUG',
+#         },
+#         '{{project_name}}': {
+#             'handlers': ['file'],
+#             'level': 'DEBUG',
+#         },
+#     }
+# }
 ########## END LOGGING CONFIGURATION
 
 
@@ -341,34 +381,34 @@ LOGGING = {
 
 
 ########## DJANGO SUIT CONFIGURATION
-SUIT_CONFIG = {
-    # header
-    'ADMIN_NAME': '{{ project_name }}',
-    # 'HEADER_DATE_FORMAT': 'l, j. F Y',
-    # 'HEADER_TIME_FORMAT': 'H:i',
-
-    # forms
-    # 'SHOW_REQUIRED_ASTERISK': True,  # Default True
-    # 'CONFIRM_UNSAVED_CHANGES': True, # Default True
-
-    # menu
-    # 'SEARCH_URL': '/admin/auth/user/',
-    # 'MENU_ICONS': {
-    #    'sites': 'icon-leaf',
-    #    'auth': 'icon-lock',
-    # },
-    # 'MENU_OPEN_FIRST_CHILD': True, # Default True
-    # 'MENU_EXCLUDE': ('auth.group',),
-    # 'MENU': (
-    #     'sites',
-    #     {'app': 'auth', 'icon':'icon-lock', 'models': ('user', 'group')},
-    #     {'label': 'Settings', 'icon':'icon-cog', 'models': ('auth.user', 'auth.group')},
-    #     {'label': 'Support', 'icon':'icon-question-sign', 'url': '/support/'},
-    # ),
-
-    # misc
-    # 'LIST_PER_PAGE': 15
-}
+# SUIT_CONFIG = {
+#     # header
+#     'ADMIN_NAME': '{{ project_name }}',
+#     # 'HEADER_DATE_FORMAT': 'l, j. F Y',
+#     # 'HEADER_TIME_FORMAT': 'H:i',
+#
+#     # forms
+#     # 'SHOW_REQUIRED_ASTERISK': True,  # Default True
+#     # 'CONFIRM_UNSAVED_CHANGES': True, # Default True
+#
+#     # menu
+#     # 'SEARCH_URL': '/admin/auth/user/',
+#     # 'MENU_ICONS': {
+#     #    'sites': 'icon-leaf',
+#     #    'auth': 'icon-lock',
+#     # },
+#     # 'MENU_OPEN_FIRST_CHILD': True, # Default True
+#     # 'MENU_EXCLUDE': ('auth.group',),
+#     # 'MENU': (
+#     #     'sites',
+#     #     {'app': 'auth', 'icon':'icon-lock', 'models': ('user', 'group')},
+#     #     {'label': 'Settings', 'icon':'icon-cog', 'models': ('auth.user', 'auth.group')},
+#     #     {'label': 'Support', 'icon':'icon-question-sign', 'url': '/support/'},
+#     # ),
+#
+#     # misc
+#     # 'LIST_PER_PAGE': 15
+# }
 ########## END DJANGO SUIT CONFIGURATION
 
 
