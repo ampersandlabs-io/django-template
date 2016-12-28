@@ -135,23 +135,6 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# DJANGO 1.9 and below
-
-# MIDDLEWARE_CLASSES = (
-#     'django.middleware.cache.UpdateCacheMiddleware',    # This must be first on the list
-#     # Use GZip compression to reduce bandwidth.
-#     'django.middleware.gzip.GZipMiddleware',
-#
-#     'django.contrib.sessions.middleware.SessionMiddleware',
-#     'django.middleware.common.CommonMiddleware',
-#     'django.middleware.csrf.CsrfViewMiddleware',
-#     'django.contrib.auth.middleware.AuthenticationMiddleware',
-#     'django.contrib.auth.middleware.SessionAuthenticationMiddleware',
-#     'django.contrib.messages.middleware.MessageMiddleware',
-#     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-#     'django.middleware.cache.FetchFromCacheMiddleware',  # This must be last
-# )
-
 # ######### END MIDDLEWARE CONFIGURATION
 
 ROOT_URLCONF = '%s.urls' % r'{{ project_name }}'
@@ -206,19 +189,6 @@ TEMPLATES = [
     },
 ]
 
-# Django 1.9 and below
-
-# TEMPLATE_CONTEXT_PROCESSORS = (
-#     'django.contrib.auth.context_processors.auth',
-#     'django.core.context_processors.debug',
-#     'django.core.context_processors.i18n',
-#     'django.core.context_processors.media',
-#     'django.core.context_processors.static',
-#     'django.core.context_processors.tz',
-#     'django.contrib.messages.context_processors.messages',
-#     'django.core.context_processors.request',
-# )
-
 # ######### AWS, STATIC, TEMPLATE CONFIGURATION
 
 STATICFILES_STORAGE = DEFAULT_FILE_STORAGE = 'storages.backends.s3boto.S3BotoStorage'
@@ -227,28 +197,13 @@ AWS_S3_SECURE_URLS = False
 AWS_QUERYSTRING_AUTH = False
 
 
-S3_URL = 'http://%s.s3.amazonaws.com/' % AWS_STORAGE_BUCKET_NAME
+S3_URL = 'https://%s.s3.amazonaws.com/' % AWS_STORAGE_BUCKET_NAME
 STATIC_URL = S3_URL
 STATIC_ROOT = ''
 
 STATICFILES_DIRS = (
     BASE_DIR('{{project_name}}', 'static'),
 )
-
-# django 1.9 and below
-# STATICFILES_FINDERS = (
-#     'django.contrib.staticfiles.finders.FileSystemFinder',
-#     'django.contrib.staticfiles.finders.AppDirectoriesFinder',
-#     'compressor.finders.CompressorFinder',
-# )
-#
-# # See: https://docs.djangoproject.com/en/dev/ref/settings/#template-loaders
-# TEMPLATE_LOADERS = (
-#     'django.template.loaders.filesystem.Loader',
-#     'django.template.loaders.app_directories.Loader',
-# )
-#
-# TEMPLATE_DIRS = [BASE_DIR('{{project_name}}', 'templates')]
 
 ########## END AWS, STATIC, TEMPLATE CONFIGURATION
 

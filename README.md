@@ -1,9 +1,9 @@
-Django Project Template
+{{project_name}}
 -----------------------
 
 Usage:
 
-    django-admin.py startproject --template=https://github.com/drewbrns/django-template/zipball/master [your_project_name]
+    django-admin.py startproject --template=git@bitbucket.org:ampersandlabs-gh/django-template.git [your_project_name]
     
     setup virtual environment of your choice:
     
@@ -15,8 +15,7 @@ Usage:
     
     pip install -r requirements.txt
 
+To run:
 
-To setup remote servers:
-
-    fab bootstrap
+    python manage.py runserver
     
