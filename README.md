@@ -1,23 +1,24 @@
 {{project_name}}
 -----------------------
 
-Start new project:
+Setup virtual environment:
 
-    django-admin.py startproject --template=git@bitbucket.org:ampersandlabs-gh/django-template.git [your_project_name]
-
-Setup project:
-    
-    setup virtual environment of your choice:
-    
     mkvirtualenv [your_project_name]
     
     or 
     
     virtualenv [your_project_name]
 
-    pip install -r requirements.txt
 
-    fab init()
+Create django project:
+
+    pip install django
+
+    django-admin.py startproject --template=git@bitbucket.org:ampersandlabs-gh/django-template.git [your_project_name]
+
+Install Dependencies:
+
+    pip install -r requirements.txt [--upgrade]
 
 Run project:
 
