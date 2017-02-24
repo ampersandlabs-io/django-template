@@ -11,11 +11,6 @@ from django.contrib.auth.models import User
 
 
 
-
-
-
-
-
 # @receiver(post_save, sender=)
 # def create_auth_token(sender, instance=None, created=False, **kwargs):
 #     if created:

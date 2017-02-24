@@ -1,3 +1,4 @@
+# noinspection PyInterpreter
 """
 WSGI config for template project.
 
@@ -9,7 +10,7 @@ https://docs.djangoproject.com/en/1.7/howto/deployment/wsgi/
 
 import os
 from dj_static import Cling
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "{{ project_name }}.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "{{ project_name }}.settings.production")
 
 from django.core.wsgi import get_wsgi_application
 application = Cling(get_wsgi_application())
