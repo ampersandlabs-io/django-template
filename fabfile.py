@@ -20,7 +20,7 @@ try:
 
     with open(ENV_FILE) as f:
         keys = f.read().split('\n')
-        fab.env.app_config = dict([x.split('=') for x in keys])
+        fab.env.app_config = dict(x.split(' = ') for x in keys)
 
 except IOError:
 

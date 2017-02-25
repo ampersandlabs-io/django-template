@@ -1,7 +1,7 @@
 {{project_name}}
 -----------------------
 
-####Starting from scratch
+#### To Begin
 
 Setup Virtual Environment:
 
@@ -11,6 +11,7 @@ Setup Virtual Environment:
     
     virtualenv [your_project_name]
 
+####Start from scratch
 
 Create Django Project:
 
@@ -18,7 +19,7 @@ Create Django Project:
 
     django-admin.py startproject --template=https://github.com/ampersandlabs-io/django-template/archive/master.zip [your_project_name]
 
-#### Joining an on going project
+#### Join an on going project
 
 Clone repo:
 
@@ -29,7 +30,8 @@ Clone repo:
 
 Install Dependencies:
 
-    pip install -r requirements.txt [--upgrade]
+    pip install -r requirements/base.txt [--upgrade]
+    pip install -r requirements/dev.txt [--upgrade]
 
 Setup Development Settings file
     
@@ -38,18 +40,27 @@ Setup Development Settings file
 Setup Environmental Variables:
 
     rename .env.example to .env and populate the missing keys.
+    
+    #it's important it follows this format
+    AWS_ACCESS_KEY_ID=this-is-some-access-key
+    
 
 Run project:
 
     gem install foreman #if not already installed
     
-    foreman start -f Procfile.dev
-    # tip: create an alias in your .bash_profile or .bash_rc and use it to start the server
+    # setup your Procfile.dev, then. 
+        
+    fab start
     
 
 Management tasks:
+
+    fab start
     
-    fab deploy
+    fab mg_cmd:command
+    
+    fab update_code:branch # if not provided it picks the current branch
     
     fab collectstatic:environment
     
