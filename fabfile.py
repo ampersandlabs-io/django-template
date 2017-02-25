@@ -20,7 +20,7 @@ try:
 
     with open(ENV_FILE) as f:
         keys = f.read().split('\n')
-        fab.env.app_config = dict(x.split(' = ') for x in keys)
+        fab.env.app_config = dict(x.split('=', 1) for x in keys)
 
 except IOError:
 
@@ -406,3 +406,10 @@ def logs(target_env, real_time=False):
 
 # ###### END HEROKU
 
+@task
+def start():
+    fab.local('foreman start -f Procfile.dev')
+
+@task
+def mg_cmd(cmd):
+    fab.local('foreman run {}'.format(cmd))
