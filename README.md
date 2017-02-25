@@ -16,7 +16,7 @@ Create Django Project:
 
     pip install django
 
-    django-admin.py startproject --template=git@bitbucket.org:ampersandlabs-gh/django-template.git [your_project_name]
+    django-admin.py startproject --template=https://github.com/ampersandlabs-io/django-template/archive/master.zip [your_project_name]
 
 #### Joining an on going project
 
